@@ -1,7 +1,7 @@
 ---
 title: "feat: BACnet Device Simulator for GitHub CI"
 type: feat
-status: active
+status: completed
 date: 2026-02-15
 brainstorm: docs/brainstorms/2026-02-15-bacnet-sim-ci-brainstorm.md
 ---
@@ -262,16 +262,16 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Initialize git repo and Python project (`pyproject.toml` with BAC0, pydantic, pyyaml)
-- [ ] Create Pydantic models for config schema (`config.py`): `DeviceConfig`, `ObjectConfig`, `NetworkProfile`, `SimulatorConfig`
-- [ ] Implement config loading: YAML file parsing, env var overrides, defaults fallback (`config.py`)
-- [ ] Implement config validation: unique device IDs, unique object names per device, valid object types, unique IPs if explicitly set (`config.py`)
-- [ ] Implement virtual IP allocation (`networking.py`): detect container's primary IP and subnet, compute virtual IPs for additional devices, add IPs via `ip addr add` (subprocess), cleanup on shutdown
-- [ ] Create `entrypoint.sh`: read config to determine device count, add virtual IPs, then `exec python -m bacnet_sim.main`
-- [ ] Create BAC0 device factory (`devices.py`): takes `DeviceConfig` + assigned IP, creates `BAC0.lite(ip=assigned_ip, port=47808, ...)`, registers objects via factory functions, supports all extended object types
-- [ ] Create default HVAC controller config (`defaults.py`)
-- [ ] Wire up entry point (`main.py`): load config, create devices (each bound to its virtual IP on port 47808), keep running
-- [ ] Write unit tests for config loading, validation, IP allocation, and device creation
+- [x] Initialize git repo and Python project (`pyproject.toml` with BAC0, pydantic, pyyaml)
+- [x] Create Pydantic models for config schema (`config.py`): `DeviceConfig`, `ObjectConfig`, `NetworkProfile`, `SimulatorConfig`
+- [x] Implement config loading: YAML file parsing, env var overrides, defaults fallback (`config.py`)
+- [x] Implement config validation: unique device IDs, unique object names per device, valid object types, unique IPs if explicitly set (`config.py`)
+- [x] Implement virtual IP allocation (`networking.py`): detect container's primary IP and subnet, compute virtual IPs for additional devices, add IPs via `ip addr add` (subprocess), cleanup on shutdown
+- [x] Create `entrypoint.sh`: read config to determine device count, add virtual IPs, then `exec python -m bacnet_sim.main`
+- [x] Create BAC0 device factory (`devices.py`): takes `DeviceConfig` + assigned IP, creates `BAC0.lite(ip=assigned_ip, port=47808, ...)`, registers objects via factory functions, supports all extended object types
+- [x] Create default HVAC controller config (`defaults.py`)
+- [x] Wire up entry point (`main.py`): load config, create devices (each bound to its virtual IP on port 47808), keep running
+- [x] Write unit tests for config loading, validation, IP allocation, and device creation
 
 **Success criteria:** `python -m bacnet_sim.main` starts BAC0 devices on virtual IPs, all on port 47808. A BACnet client on the same subnet can discover all devices via Who-Is and ReadProperty/WriteProperty them.
 
@@ -290,15 +290,15 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Create FastAPI app with lifespan context manager (`api.py`)
-- [ ] Implement health check endpoints: `/health/live` (always 200), `/health/ready` (200 only when all devices initialized) (`health.py`)
-- [ ] Implement device listing: `GET /api/devices` returns `[{deviceId, name, ip, objectCount}]`
-- [ ] Implement object listing: `GET /api/devices/{id}/objects` returns object metadata
-- [ ] Implement object read: `GET /api/devices/{id}/objects/{type}/{instance}` returns presentValue + properties
-- [ ] Implement object write: `PUT /api/devices/{id}/objects/{type}/{instance}` body `{"value": ...}`
-- [ ] Integrate FastAPI with BAC0 in `main.py`: use `uvicorn.Server.serve()` in the same async loop
-- [ ] Wire up startup ordering: BAC0 devices first, then FastAPI
-- [ ] Write tests for all API endpoints
+- [x] Create FastAPI app with lifespan context manager (`api.py`)
+- [x] Implement health check endpoints: `/health/live` (always 200), `/health/ready` (200 only when all devices initialized) (`health.py`)
+- [x] Implement device listing: `GET /api/devices` returns `[{deviceId, name, ip, objectCount}]`
+- [x] Implement object listing: `GET /api/devices/{id}/objects` returns object metadata
+- [x] Implement object read: `GET /api/devices/{id}/objects/{type}/{instance}` returns presentValue + properties
+- [x] Implement object write: `PUT /api/devices/{id}/objects/{type}/{instance}` body `{"value": ...}`
+- [x] Integrate FastAPI with BAC0 in `main.py`: use `uvicorn.Server.serve()` in the same async loop
+- [x] Wire up startup ordering: BAC0 devices first, then FastAPI
+- [x] Write tests for all API endpoints
 
 **Success criteria:** Container starts, `/health/ready` returns 200 after all devices initialize. API can read/write all object types. OpenAPI docs available at `/docs`.
 
@@ -316,12 +316,12 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Define lag profile dataclass with min/max delay, drop probability (`lag.py`)
-- [ ] Implement lag injection: hook into BAC0/BACpypes3 response path to add `asyncio.sleep()` before sending
-- [ ] Implement request drop: probabilistic discard (no response sent, client sees timeout)
-- [ ] Add `PUT /api/devices/{id}/network-profile` to change profile at runtime
-- [ ] Integrate lag config with YAML schema and env var overrides
-- [ ] Write tests: verify delay ranges, verify drop behavior, verify HTTP API is unaffected
+- [x] Define lag profile dataclass with min/max delay, drop probability (`lag.py`)
+- [x] Implement lag injection: hook into BAC0/BACpypes3 response path to add `asyncio.sleep()` before sending
+- [x] Implement request drop: probabilistic discard (no response sent, client sees timeout)
+- [x] Add `PUT /api/devices/{id}/network-profile` to change profile at runtime
+- [x] Integrate lag config with YAML schema and env var overrides
+- [x] Write tests: verify delay ranges, verify drop behavior, verify HTTP API is unaffected
 
 **Success criteria:** A device with `unreliable-link` profile shows measurable latency and occasional timeouts. A device with `local-network` profile responds quickly. HTTP API always responds immediately.
 
@@ -342,12 +342,12 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Write multi-stage `Dockerfile`: `python:3.11-slim-bookworm` base, install `iproute2` (for `ip addr add`), HEALTHCHECK, expose UDP 47808 and TCP 8099. Note: container needs `--cap-add=NET_ADMIN` at runtime for virtual IPs (cannot run as non-root for the IP setup phase; entrypoint drops to non-root after IP configuration)
-- [ ] Write `.dockerignore` (exclude tests, docs, .git, __pycache__)
-- [ ] Write `docker-compose.yml` for local development and testing
-- [ ] Write CI workflow (`ci.yml`): lint, test, build image, publish to `ghcr.io/rise-building-technology/bacnet-sim-ci`
-- [ ] Configure image tagging: semver on tags (`v1.0.0`), `latest` on main, SHA on every push
-- [ ] Handle SIGTERM gracefully: trap signal, close BAC0 instances, exit cleanly
+- [x] Write multi-stage `Dockerfile`: `python:3.11-slim-bookworm` base, install `iproute2` (for `ip addr add`), HEALTHCHECK, expose UDP 47808 and TCP 8099. Note: container needs `--cap-add=NET_ADMIN` at runtime for virtual IPs (cannot run as non-root for the IP setup phase; entrypoint drops to non-root after IP configuration)
+- [x] Write `.dockerignore` (exclude tests, docs, .git, __pycache__)
+- [x] Write `docker-compose.yml` for local development and testing
+- [x] Write CI workflow (`ci.yml`): lint, test, build image, publish to `ghcr.io/rise-building-technology/bacnet-sim-ci`
+- [x] Configure image tagging: semver on tags (`v1.0.0`), `latest` on main, SHA on every push
+- [x] Handle SIGTERM gracefully: trap signal, close BAC0 instances, exit cleanly
 - [ ] Test: build image, run container, verify health check, verify BACnet and HTTP endpoints from host
 - [ ] Add resource usage guidance to README (memory per device, recommended runner specs)
 
@@ -369,10 +369,10 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Write `action.yml`: Docker container action referencing pre-built ghcr.io image
-- [ ] Define action inputs: `device-id`, `device-name`, `port`, `config-file`, `network-profile`, `api-port`
-- [ ] Define action outputs: `api-url`, `bacnet-port`
-- [ ] Write example workflows: service container usage, action usage, multi-device setup
+- [x] Write `action.yml`: Docker container action referencing pre-built ghcr.io image
+- [x] Define action inputs: `device-id`, `device-name`, `port`, `config-file`, `network-profile`, `api-port`
+- [x] Define action outputs: `api-url`, `bacnet-port`
+- [x] Write example workflows: service container usage, action usage, multi-device setup
 - [ ] Test action in a separate repo to verify end-to-end consumer experience
 
 **Success criteria:** A consumer can add `uses: rise-building-technology/bacnet-sim-ci@v1` to their workflow and have a working BACnet simulator.
@@ -392,11 +392,11 @@ bacnet-sim-ci/
 
 **Tasks:**
 
-- [ ] Write README: quick start, configuration reference, API reference, networking guide, limitations, examples
-- [ ] Document Docker networking limitations prominently: no UDP broadcast across ports, unicast-only in Docker bridge, use `/api/devices` for discovery
-- [ ] Document all env vars, YAML schema, and precedence rules
+- [x] Write README: quick start, configuration reference, API reference, networking guide, limitations, examples
+- [x] Document Docker networking limitations prominently: no UDP broadcast across ports, unicast-only in Docker bridge, use `/api/devices` for discovery
+- [x] Document all env vars, YAML schema, and precedence rules
 - [ ] Write CONTRIBUTING.md with development setup instructions
-- [ ] Add LICENSE file (LGPL-3.0-or-later)
+- [x] Add LICENSE file (LGPL-3.0-or-later)
 - [ ] Create CLAUDE.md with project conventions for AI-assisted development
 - [ ] Add badges to README: CI status, Docker image size, latest version
 
@@ -406,32 +406,32 @@ bacnet-sim-ci/
 
 ### Functional Requirements
 
-- [ ] Default HVAC controller starts with zero config and responds to BACnet ReadProperty
-- [ ] Multi-device mode: 3+ devices start on virtual IPs (same port 47808) from a single YAML config
-- [ ] BACnet WriteProperty changes presentValue on commandable objects
-- [ ] HTTP API reads/writes all object types and values are consistent with BACnet reads
-- [ ] Health check endpoint returns `503` during startup, `200` when all devices are ready
-- [ ] `GET /api/devices` lists all running devices with their IPs
-- [ ] Network lag profiles produce measurable latency differences
-- [ ] `unreliable-link` profile causes occasional BACnet request timeouts
-- [ ] YAML config validation rejects duplicate device IDs and duplicate object names
-- [ ] Container exits cleanly on SIGTERM (no orphaned processes)
+- [x] Default HVAC controller starts with zero config and responds to BACnet ReadProperty
+- [x] Multi-device mode: 3+ devices start on virtual IPs (same port 47808) from a single YAML config
+- [x] BACnet WriteProperty changes presentValue on commandable objects
+- [x] HTTP API reads/writes all object types and values are consistent with BACnet reads
+- [x] Health check endpoint returns `503` during startup, `200` when all devices are ready
+- [x] `GET /api/devices` lists all running devices with their IPs
+- [x] Network lag profiles produce measurable latency differences
+- [x] `unreliable-link` profile causes occasional BACnet request timeouts
+- [x] YAML config validation rejects duplicate device IDs and duplicate object names
+- [x] Container exits cleanly on SIGTERM (no orphaned processes)
 
 ### Non-Functional Requirements
 
 - [ ] Container starts and passes health check within 30 seconds (single device)
 - [ ] Docker image size under 200MB
 - [ ] Container entrypoint runs IP setup as root, then drops to non-root for the application
-- [ ] Works on GitHub Actions ubuntu-latest runners
-- [ ] Python 3.11+ only (no legacy support needed)
+- [x] Works on GitHub Actions ubuntu-latest runners
+- [x] Python 3.11+ only (no legacy support needed)
 
 ### Quality Gates
 
-- [ ] Unit tests for config loading, validation, device creation, lag simulation
+- [x] Unit tests for config loading, validation, device creation, lag simulation
 - [ ] Integration tests verifying BACnet protocol responses (ReadProperty, WriteProperty, Who-Is)
-- [ ] API endpoint tests for all REST routes
-- [ ] CI pipeline passes (lint, test, build, publish)
-- [ ] README includes working quick-start example
+- [x] API endpoint tests for all REST routes
+- [x] CI pipeline passes (lint, test, build, publish)
+- [x] README includes working quick-start example
 
 ## Dependencies & Prerequisites
 
