@@ -22,17 +22,32 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+        run: pip install -e ".[dev]"
 
       - name: Lint with ruff
         run: ruff check src/ tests/
 
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Run unit tests
+        run: pytest -v
+
+  integration-test:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run integration tests
+        run: pytest tests/test_integration.py -v
 
   build-and-push:
-    needs: lint-and-test
+    needs: integration-test
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     permissions:
