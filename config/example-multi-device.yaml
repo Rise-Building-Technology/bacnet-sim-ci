@@ -1,0 +1,65 @@
+global:
+  api_port: 8099
+  bacnet_port: 47808
+  subnet_mask: 24
+  network_profile: local-network
+
+devices:
+  - device_id: 1001
+    name: "AHU-1"
+    network_profile: local-network
+    objects:
+      - type: analog-input
+        instance: 1
+        name: "Zone Temp"
+        unit: degreesCelsius
+        value: 72.5
+      - type: analog-output
+        instance: 1
+        name: "Setpoint"
+        unit: degreesCelsius
+        value: 72.0
+        commandable: true
+      - type: binary-output
+        instance: 1
+        name: "Fan Command"
+        inactive_text: "Off"
+        active_text: "On"
+        value: false
+        commandable: true
+
+  - device_id: 1002
+    name: "AHU-2"
+    network_profile: remote-site
+    objects:
+      - type: analog-input
+        instance: 1
+        name: "Zone Temp"
+        unit: degreesCelsius
+        value: 68.0
+      - type: analog-output
+        instance: 1
+        name: "Setpoint"
+        unit: degreesCelsius
+        value: 70.0
+        commandable: true
+
+  - device_id: 1003
+    name: "VAV-1"
+    network_profile: unreliable-link
+    objects:
+      - type: analog-input
+        instance: 1
+        name: "Discharge Air Temp"
+        unit: degreesCelsius
+        value: 60.0
+      - type: binary-input
+        instance: 1
+        name: "Damper Status"
+        value: true
+      - type: multistate-value
+        instance: 1
+        name: "Mode"
+        states: ["Auto", "Manual", "Override"]
+        value: 1
+        commandable: true

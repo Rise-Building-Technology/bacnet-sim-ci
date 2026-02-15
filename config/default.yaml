@@ -1,0 +1,63 @@
+global:
+  api_port: 8099
+  bacnet_port: 47808
+  subnet_mask: 24
+  network_profile: none
+
+devices:
+  - device_id: 1001
+    name: "HVAC Controller"
+    objects:
+      - type: analog-input
+        instance: 1
+        name: "Zone Temp"
+        unit: degreesCelsius
+        value: 72.5
+
+      - type: analog-input
+        instance: 2
+        name: "Supply Air Temp"
+        unit: degreesCelsius
+        value: 55.0
+
+      - type: analog-output
+        instance: 1
+        name: "Zone Setpoint"
+        unit: degreesCelsius
+        value: 72.0
+        commandable: true
+
+      - type: binary-input
+        instance: 1
+        name: "Fan Status"
+        inactive_text: "Off"
+        active_text: "On"
+        value: true
+
+      - type: binary-output
+        instance: 1
+        name: "Fan Command"
+        inactive_text: "Off"
+        active_text: "On"
+        value: false
+        commandable: true
+
+      - type: analog-output
+        instance: 2
+        name: "Damper Position"
+        unit: percent
+        value: 50.0
+        commandable: true
+
+      - type: multistate-value
+        instance: 1
+        name: "Occupancy Mode"
+        states: ["Auto", "Occupied", "Unoccupied", "Standby"]
+        value: 1
+        commandable: true
+
+      - type: character-string
+        instance: 1
+        name: "Device Status"
+        value: "Normal"
+        commandable: true
