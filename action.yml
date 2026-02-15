@@ -57,6 +57,18 @@ runs:
         INPUT_NETWORK_PROFILE: ${{ inputs.network-profile }}
         INPUT_IMAGE_TAG: ${{ inputs.image-tag }}
       run: |
+        GHCR_IMAGE="ghcr.io/rise-building-technology/bacnet-sim-ci:${INPUT_IMAGE_TAG}"
+
+        # Try pre-built image first, fall back to building from source
+        if docker pull "$GHCR_IMAGE" 2>/dev/null; then
+          IMAGE="$GHCR_IMAGE"
+          echo "Using pre-built image: $IMAGE"
+        else
+          echo "Pre-built image not accessible, building from source..."
+          docker build -t bacnet-sim-ci:local "$GITHUB_ACTION_PATH"
+          IMAGE="bacnet-sim-ci:local"
+        fi
+
         CONFIG_MOUNT=""
         if [ -n "$INPUT_CONFIG_FILE" ]; then
           CONFIG_MOUNT="-v $(realpath "$INPUT_CONFIG_FILE"):/app/config/custom.yaml -e CONFIG_FILE=/app/config/custom.yaml"
@@ -73,17 +85,17 @@ runs:
           -e "API_PORT=${INPUT_API_PORT}" \
           -e "NETWORK_PROFILE=${INPUT_NETWORK_PROFILE}" \
           $CONFIG_MOUNT \
-          "ghcr.io/rise-building-technology/bacnet-sim-ci:${INPUT_IMAGE_TAG}"
+          "$IMAGE"
 
         # Wait for readiness
         echo "Waiting for BACnet simulator to be ready..."
-        for i in $(seq 1 30); do
+        for i in $(seq 1 60); do
           if curl -sf "http://localhost:${INPUT_API_PORT}/health/ready" > /dev/null 2>&1; then
             echo "Simulator is ready!"
             break
           fi
-          if [ "$i" -eq 30 ]; then
-            echo "ERROR: Simulator failed to start within 30 seconds"
+          if [ "$i" -eq 60 ]; then
+            echo "ERROR: Simulator failed to start within 60 seconds"
             docker logs bacnet-sim
             exit 1
           fi
