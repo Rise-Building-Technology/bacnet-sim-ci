@@ -373,7 +373,7 @@ bacnet-sim-ci/
 - [x] Define action inputs: `device-id`, `device-name`, `port`, `config-file`, `network-profile`, `api-port`
 - [x] Define action outputs: `api-url`, `bacnet-port`
 - [x] Write example workflows: service container usage, action usage, multi-device setup
-- [ ] Test action in a separate repo to verify end-to-end consumer experience
+- [x] Test action in a separate repo to verify end-to-end consumer experience
 
 **Success criteria:** A consumer can add `uses: rise-building-technology/bacnet-sim-ci@v1` to their workflow and have a working BACnet simulator.
 
