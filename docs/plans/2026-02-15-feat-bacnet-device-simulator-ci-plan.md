@@ -348,8 +348,8 @@ bacnet-sim-ci/
 - [x] Write CI workflow (`ci.yml`): lint, test, build image, publish to `ghcr.io/rise-building-technology/bacnet-sim-ci`
 - [x] Configure image tagging: semver on tags (`v1.0.0`), `latest` on main, SHA on every push
 - [x] Handle SIGTERM gracefully: trap signal, close BAC0 instances, exit cleanly
-- [ ] Test: build image, run container, verify health check, verify BACnet and HTTP endpoints from host
-- [ ] Add resource usage guidance to README (memory per device, recommended runner specs)
+- [x] Test: build image, run container, verify health check, verify BACnet and HTTP endpoints from host
+- [x] Add resource usage guidance to README (memory per device, recommended runner specs)
 
 **Success criteria:** `docker run ghcr.io/rise-building-technology/bacnet-sim-ci:latest` starts simulator, passes health check, responds to BACnet and HTTP requests. CI pipeline publishes image on push to main.
 
@@ -395,10 +395,10 @@ bacnet-sim-ci/
 - [x] Write README: quick start, configuration reference, API reference, networking guide, limitations, examples
 - [x] Document Docker networking limitations prominently: no UDP broadcast across ports, unicast-only in Docker bridge, use `/api/devices` for discovery
 - [x] Document all env vars, YAML schema, and precedence rules
-- [ ] Write CONTRIBUTING.md with development setup instructions
+- [x] Write CONTRIBUTING.md with development setup instructions
 - [x] Add LICENSE file (LGPL-3.0-or-later)
-- [ ] Create CLAUDE.md with project conventions for AI-assisted development
-- [ ] Add badges to README: CI status, Docker image size, latest version
+- [x] Create CLAUDE.md with project conventions for AI-assisted development
+- [x] Add badges to README: CI status, Docker image size, latest version
 
 **Success criteria:** A developer unfamiliar with the project can go from `docker pull` to running integration tests by following the README alone.
 
@@ -419,16 +419,16 @@ bacnet-sim-ci/
 
 ### Non-Functional Requirements
 
-- [ ] Container starts and passes health check within 30 seconds (single device)
-- [ ] Docker image size under 200MB
-- [ ] Container entrypoint runs IP setup as root, then drops to non-root for the application
+- [x] Container starts and passes health check within 30 seconds (single device)
+- [x] Docker image size under 200MB
+- [x] Container entrypoint runs IP setup as root, then drops to non-root for the application
 - [x] Works on GitHub Actions ubuntu-latest runners
 - [x] Python 3.11+ only (no legacy support needed)
 
 ### Quality Gates
 
 - [x] Unit tests for config loading, validation, device creation, lag simulation
-- [ ] Integration tests verifying BACnet protocol responses (ReadProperty, WriteProperty, Who-Is)
+- [x] Integration tests verifying BACnet protocol responses (ReadProperty, WriteProperty, Who-Is)
 - [x] API endpoint tests for all REST routes
 - [x] CI pipeline passes (lint, test, build, publish)
 - [x] README includes working quick-start example
