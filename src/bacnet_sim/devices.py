@@ -6,7 +6,6 @@ using the BAC0 factory pattern, and manages device lifecycle.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -84,22 +83,28 @@ class SimulatedDevice:
         return objects
 
 
-def _create_object(obj_config: ObjectConfig) -> None:
+def _create_object(obj_config: ObjectConfig) -> Any | None:
     """Call the appropriate BAC0 factory function to create an object.
 
-    Objects accumulate internally until add_objects_to_application() is called.
+    Returns the ObjectFactory instance (all instances share a class-level
+    objects dict) so the caller can call add_objects_to_application().
+    Returns None if the object type is unsupported.
     """
-    factory = OBJECT_FACTORIES.get(obj_config.type)
-    if factory is None:
+    factory_fn = OBJECT_FACTORIES.get(obj_config.type)
+    if factory_fn is None:
         logger.warning("Unsupported object type: %s (skipping)", obj_config.type.value)
-        return
+        return None
 
     kwargs: dict[str, Any] = {
         "name": obj_config.name,
         "description": obj_config.name,
     }
 
-    if obj_config.commandable:
+    # Output types (analog-output, binary-output) are inherently commandable
+    # in BACpypes3. Passing is_commandable=True to BAC0 causes MRO conflicts
+    # on newer versions. Only set it for input/value types.
+    inherently_commandable = {ObjectType.ANALOG_OUTPUT, ObjectType.BINARY_OUTPUT}
+    if obj_config.commandable and obj_config.type not in inherently_commandable:
         kwargs["is_commandable"] = True
 
     properties: dict[str, Any] = {}
@@ -119,7 +124,7 @@ def _create_object(obj_config: ObjectConfig) -> None:
     if obj_config.value is not None:
         kwargs["presentValue"] = obj_config.value
 
-    factory(**kwargs)
+    return factory_fn(**kwargs)
 
 
 async def create_device(
@@ -157,7 +162,7 @@ async def create_device(
         lag_profile=lag_profile,
     )
 
-    # Create BAC0 device
+    # Create BAC0 device (synchronous - _initialized is set before returning)
     subnet_ip = f"{ip}/{subnet_mask}"
     bacnet = BAC0.lite(
         ip=subnet_ip,
@@ -166,23 +171,18 @@ async def create_device(
         localObjName=config.name,
     )
 
-    # Wait for initialization (poll BAC0's internal flag)
-    for _ in range(100):  # 10 second timeout
-        if hasattr(bacnet, "_initialized") and bacnet._initialized:
-            break
-        await asyncio.sleep(0.1)
-    else:
-        raise TimeoutError(f"Device {config.device_id} failed to initialize within 10 seconds")
-
-    # Create all objects using factory pattern
+    # Create all objects using factory pattern.
+    # Factory functions return ObjectFactory instances that share a class-level
+    # objects dict. Any instance can register all accumulated objects.
+    factory_instance = None
     for obj_config in config.objects:
-        _create_object(obj_config)
+        result = _create_object(obj_config)
+        if result is not None:
+            factory_instance = result
 
     # Register all accumulated objects with the BAC0 application.
-    # Any factory function can call add_objects_to_application; we use
-    # character_string as the entry point (BAC0 accumulates all types globally).
-    if config.objects:
-        character_string.add_objects_to_application(bacnet)
+    if factory_instance is not None:
+        factory_instance.add_objects_to_application(bacnet)
 
     # Set initial values for objects that need it
     for obj_config in config.objects:

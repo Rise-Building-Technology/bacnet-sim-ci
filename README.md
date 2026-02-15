@@ -1,5 +1,8 @@
 # bacnet-sim-ci
 
+[![CI](https://github.com/Rise-Building-Technology/bacnet-sim-ci/actions/workflows/ci.yml/badge.svg)](https://github.com/Rise-Building-Technology/bacnet-sim-ci/actions/workflows/ci.yml)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+
 BACnet device simulator for CI pipelines. Runs as a Docker container or GitHub Action to provide virtual BACnet/IP devices for integration testing.
 
 ## Quick Start
@@ -243,6 +246,17 @@ networks:
 ### GitHub Actions
 
 When using service containers, the simulator is accessible via `localhost` on the mapped ports. For BACnet protocol access, use the virtual IPs returned by `GET /api/devices`.
+
+## Resource Usage
+
+| Devices | Approximate Memory | Recommended Runner |
+|---|---|---|
+| 1 (default) | ~80 MB | Any (ubuntu-latest) |
+| 5 | ~200 MB | ubuntu-latest |
+| 10 | ~350 MB | ubuntu-latest |
+| 20+ | ~600 MB+ | Large runner recommended |
+
+Each BAC0 device instance uses roughly 30-50 MB. The base process (Python + FastAPI) uses ~50 MB.
 
 ## Limitations
 

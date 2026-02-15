@@ -14,12 +14,17 @@ RUN pip install --no-cache-dir --target=/app/deps -r requirements.txt
 # === Runtime stage ===
 FROM python:3.11-slim-bookworm
 
-# Install iproute2 for virtual IP management (ip addr add)
-# and curl for healthcheck
+# Install iproute2 for virtual IP management (ip addr add),
+# curl for healthcheck, and gosu for privilege de-escalation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for running the application
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -36,6 +41,9 @@ COPY config/ ./config/
 COPY scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# Ensure appuser can read all app files
+RUN chown -R appuser:appuser /app
+
 # BACnet/IP uses UDP 47808; FastAPI uses TCP 8099
 EXPOSE 47808/udp
 EXPOSE 8099/tcp
@@ -44,8 +52,5 @@ EXPOSE 8099/tcp
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=5 \
     CMD curl -f http://localhost:8099/health/ready || exit 1
 
-# Note: Container needs --cap-add=NET_ADMIN at runtime for multi-device
-# virtual IP setup. The entrypoint runs as root to configure IPs,
-# then the Python process handles everything.
-
+# Entrypoint runs as root to set up virtual IPs, then drops to appuser
 ENTRYPOINT ["./entrypoint.sh"]
