@@ -1,5 +1,7 @@
 """Tests for virtual IP networking module."""
 
+from unittest.mock import patch
+
 import pytest
 
 from bacnet_sim.networking import compute_virtual_ips, setup_virtual_ips
@@ -34,7 +36,6 @@ class TestComputeVirtualIps:
 
 class TestSetupVirtualIps:
     def test_single_device_returns_primary(self):
-        """On non-Linux, add_virtual_ip is a no-op, so this tests the logic."""
         ips = setup_virtual_ips(
             primary_ip="172.18.0.10",
             prefix_length=24,
@@ -42,15 +43,18 @@ class TestSetupVirtualIps:
         )
         assert ips == ["172.18.0.10"]
 
-    def test_multi_device_auto_assign(self):
+    @patch("bacnet_sim.networking.add_virtual_ip", return_value=True)
+    def test_multi_device_auto_assign(self, mock_add):
         ips = setup_virtual_ips(
             primary_ip="172.18.0.10",
             prefix_length=24,
             device_count=3,
         )
         assert ips == ["172.18.0.10", "172.18.0.11", "172.18.0.12"]
+        assert mock_add.call_count == 2
 
-    def test_explicit_ip_override(self):
+    @patch("bacnet_sim.networking.add_virtual_ip", return_value=True)
+    def test_explicit_ip_override(self, mock_add):
         ips = setup_virtual_ips(
             primary_ip="172.18.0.10",
             prefix_length=24,
@@ -68,3 +72,12 @@ class TestSetupVirtualIps:
             device_count=0,
         )
         assert ips == []
+
+    @patch("bacnet_sim.networking.add_virtual_ip", return_value=False)
+    def test_failed_ip_add_raises(self, mock_add):
+        with pytest.raises(RuntimeError, match="Failed to add virtual IP"):
+            setup_virtual_ips(
+                primary_ip="172.18.0.10",
+                prefix_length=24,
+                device_count=2,
+            )
