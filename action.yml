@@ -1,0 +1,102 @@
+name: "BACnet Device Simulator"
+description: "Start a BACnet device simulator for integration testing in CI pipelines"
+branding:
+  icon: "cpu"
+  color: "blue"
+
+inputs:
+  device-id:
+    description: "BACnet device instance number"
+    required: false
+    default: "1001"
+  device-name:
+    description: "BACnet device object name"
+    required: false
+    default: "SimDevice"
+  port:
+    description: "BACnet/IP UDP port"
+    required: false
+    default: "47808"
+  api-port:
+    description: "REST API port"
+    required: false
+    default: "8099"
+  config-file:
+    description: "Path to device configuration YAML file"
+    required: false
+    default: ""
+  network-profile:
+    description: "Network lag profile (none, local-network, remote-site, unreliable-link)"
+    required: false
+    default: "none"
+  image-tag:
+    description: "Docker image tag to use"
+    required: false
+    default: "latest"
+
+outputs:
+  api-url:
+    description: "URL of the simulator REST API"
+    value: ${{ steps.start.outputs.api-url }}
+  bacnet-port:
+    description: "BACnet/IP UDP port"
+    value: ${{ steps.start.outputs.bacnet-port }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Start BACnet Simulator
+      id: start
+      shell: bash
+      env:
+        INPUT_DEVICE_ID: ${{ inputs.device-id }}
+        INPUT_DEVICE_NAME: ${{ inputs.device-name }}
+        INPUT_PORT: ${{ inputs.port }}
+        INPUT_API_PORT: ${{ inputs.api-port }}
+        INPUT_CONFIG_FILE: ${{ inputs.config-file }}
+        INPUT_NETWORK_PROFILE: ${{ inputs.network-profile }}
+        INPUT_IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        CONFIG_MOUNT=""
+        if [ -n "$INPUT_CONFIG_FILE" ]; then
+          CONFIG_MOUNT="-v $(realpath "$INPUT_CONFIG_FILE"):/app/config/custom.yaml -e CONFIG_FILE=/app/config/custom.yaml"
+        fi
+
+        docker run -d \
+          --name bacnet-sim \
+          --cap-add=NET_ADMIN \
+          -p "${INPUT_PORT}:${INPUT_PORT}/udp" \
+          -p "${INPUT_API_PORT}:${INPUT_API_PORT}" \
+          -e "BACNET_DEVICE_ID=${INPUT_DEVICE_ID}" \
+          -e "BACNET_DEVICE_NAME=${INPUT_DEVICE_NAME}" \
+          -e "BACNET_PORT=${INPUT_PORT}" \
+          -e "API_PORT=${INPUT_API_PORT}" \
+          -e "NETWORK_PROFILE=${INPUT_NETWORK_PROFILE}" \
+          $CONFIG_MOUNT \
+          "ghcr.io/rise-building-technology/bacnet-sim-ci:${INPUT_IMAGE_TAG}"
+
+        # Wait for readiness
+        echo "Waiting for BACnet simulator to be ready..."
+        for i in $(seq 1 30); do
+          if curl -sf "http://localhost:${INPUT_API_PORT}/health/ready" > /dev/null 2>&1; then
+            echo "Simulator is ready!"
+            break
+          fi
+          if [ "$i" -eq 30 ]; then
+            echo "ERROR: Simulator failed to start within 30 seconds"
+            docker logs bacnet-sim
+            exit 1
+          fi
+          sleep 1
+        done
+
+        echo "api-url=http://localhost:${INPUT_API_PORT}" >> "$GITHUB_OUTPUT"
+        echo "bacnet-port=${INPUT_PORT}" >> "$GITHUB_OUTPUT"
+
+    - name: Display simulator info
+      shell: bash
+      env:
+        INPUT_API_PORT: ${{ inputs.api-port }}
+      run: |
+        echo "BACnet Simulator running:"
+        curl -s "http://localhost:${INPUT_API_PORT}/api/devices" | python -m json.tool

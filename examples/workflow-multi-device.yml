@@ -1,0 +1,44 @@
+# Example: Multi-device BACnet simulation
+#
+# Uses a custom YAML config to spin up multiple virtual devices
+# in a single container with different network profiles.
+
+name: Multi-Device BACnet Tests
+
+on: [push, pull_request]
+
+jobs:
+  multi-device-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start multi-device BACnet Simulator
+        uses: rise-building-technology/bacnet-sim-ci@v1
+        with:
+          config-file: "tests/fixtures/multi-device.yaml"
+
+      - name: Verify all devices are running
+        run: |
+          # List all devices
+          curl -s http://localhost:8099/api/devices | python -m json.tool
+
+          # Check each device's objects
+          for id in 1001 1002 1003; do
+            echo "--- Device $id ---"
+            curl -s http://localhost:8099/api/devices/$id/objects | python -m json.tool
+          done
+
+      - name: Mutate values via HTTP API
+        run: |
+          # Set zone temperature on device 1001
+          curl -s -X PUT http://localhost:8099/api/devices/1001/objects/analog-input/1 \
+            -H "Content-Type: application/json" \
+            -d '{"value": 75.0}' | python -m json.tool
+
+      - name: Run your BACnet integration tests
+        run: |
+          # Devices are on virtual IPs, all on port 47808
+          # Use the /api/devices endpoint to discover IPs
+          echo "Run your multi-device BACnet tests here"

@@ -1,0 +1,42 @@
+# Example: Using bacnet-sim-ci as a GitHub Actions service container
+#
+# This is the recommended approach for long-running integration tests.
+# The simulator runs as a sidecar alongside your test job.
+
+name: BACnet Integration Tests
+
+on: [push, pull_request]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    services:
+      bacnet-sim:
+        image: ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+        ports:
+          - 47808:47808/udp
+          - 8099:8099
+        env:
+          BACNET_DEVICE_ID: "1001"
+          BACNET_DEVICE_NAME: "TestDevice"
+        options: >-
+          --cap-add=NET_ADMIN
+          --health-cmd "curl -f http://localhost:8099/health/ready || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+          --health-start-period 15s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify simulator is running
+        run: |
+          curl -s http://localhost:8099/api/devices | python -m json.tool
+
+      - name: Run your BACnet integration tests
+        run: |
+          # Replace with your test command
+          # pytest tests/integration/ --bacnet-host localhost --bacnet-port 47808
+          echo "Run your BACnet tests here"

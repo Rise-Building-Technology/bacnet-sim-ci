@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import ipaddress
+import logging
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
 
+logger = logging.getLogger(__name__)
 
-class ObjectType(str, Enum):
+
+class ObjectType(StrEnum):
     ANALOG_INPUT = "analog-input"
     ANALOG_OUTPUT = "analog-output"
     BINARY_INPUT = "binary-input"
@@ -22,7 +26,7 @@ class ObjectType(str, Enum):
     TREND_LOG = "trend-log"
 
 
-class NetworkProfileName(str, Enum):
+class NetworkProfileName(StrEnum):
     LOCAL_NETWORK = "local-network"
     REMOTE_SITE = "remote-site"
     UNRELIABLE_LINK = "unreliable-link"
@@ -34,6 +38,13 @@ class NetworkCustomConfig(BaseModel):
     min_delay_ms: float = 0
     max_delay_ms: float = 0
     drop_probability: float = 0.0
+
+    @field_validator("min_delay_ms", "max_delay_ms")
+    @classmethod
+    def validate_non_negative_delay(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("delay values must be non-negative")
+        return v
 
     @field_validator("drop_probability")
     @classmethod
@@ -76,12 +87,34 @@ class DeviceConfig(BaseModel):
     network_custom: NetworkCustomConfig | None = None
     objects: list[ObjectConfig] = []
 
+    @field_validator("device_id")
+    @classmethod
+    def validate_device_id(cls, v: int) -> int:
+        if not 0 <= v <= 4194303:
+            raise ValueError("device_id must be 0-4194303 (BACnet 22-bit range)")
+        return v
+
+    @field_validator("ip")
+    @classmethod
+    def validate_ip_format(cls, v: str | None) -> str | None:
+        if v is not None:
+            try:
+                ipaddress.IPv4Address(v)
+            except ValueError:
+                raise ValueError(f"Invalid IPv4 address: {v}")
+        return v
+
     @model_validator(mode="after")
     def validate_unique_object_names(self) -> DeviceConfig:
         names = [obj.name for obj in self.objects]
-        if len(names) != len(set(names)):
-            dupes = [n for n in names if names.count(n) > 1]
-            raise ValueError(f"Duplicate object names in device {self.device_id}: {set(dupes)}")
+        seen: set[str] = set()
+        dupes: set[str] = set()
+        for n in names:
+            if n in seen:
+                dupes.add(n)
+            seen.add(n)
+        if dupes:
+            raise ValueError(f"Duplicate object names in device {self.device_id}: {dupes}")
         return self
 
     @model_validator(mode="after")
@@ -96,12 +129,33 @@ class DeviceConfig(BaseModel):
             seen.add(key)
         return self
 
+    def find_object(self, object_type: str, instance: int) -> ObjectConfig | None:
+        """Find an object config by type and instance."""
+        for obj in self.objects:
+            if obj.type.value == object_type and obj.instance == instance:
+                return obj
+        return None
+
 
 class GlobalConfig(BaseModel):
     api_port: int = 8099
     bacnet_port: int = 47808
     subnet_mask: int = 24
     network_profile: NetworkProfileName = NetworkProfileName.NONE
+
+    @field_validator("subnet_mask")
+    @classmethod
+    def validate_subnet_mask(cls, v: int) -> int:
+        if not 1 <= v <= 30:
+            raise ValueError("subnet_mask must be 1-30")
+        return v
+
+    @field_validator("api_port", "bacnet_port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not 1 <= v <= 65535:
+            raise ValueError("port must be 1-65535")
+        return v
 
 
 class SimulatorConfig(BaseModel):
@@ -110,40 +164,61 @@ class SimulatorConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_device_ids(self) -> SimulatorConfig:
-        ids = [d.device_id for d in self.devices]
-        if len(ids) != len(set(ids)):
-            dupes = [i for i in ids if ids.count(i) > 1]
-            raise ValueError(f"Duplicate device IDs: {set(dupes)}")
+        seen: set[int] = set()
+        dupes: set[int] = set()
+        for d in self.devices:
+            if d.device_id in seen:
+                dupes.add(d.device_id)
+            seen.add(d.device_id)
+        if dupes:
+            raise ValueError(f"Duplicate device IDs: {dupes}")
         return self
 
     @model_validator(mode="after")
     def validate_unique_explicit_ips(self) -> SimulatorConfig:
-        explicit_ips = [d.ip for d in self.devices if d.ip is not None]
-        if len(explicit_ips) != len(set(explicit_ips)):
-            dupes = [ip for ip in explicit_ips if explicit_ips.count(ip) > 1]
-            raise ValueError(f"Duplicate explicit IPs: {set(dupes)}")
+        seen: set[str] = set()
+        dupes: set[str] = set()
+        for d in self.devices:
+            if d.ip is not None:
+                if d.ip in seen:
+                    dupes.add(d.ip)
+                seen.add(d.ip)
+        if dupes:
+            raise ValueError(f"Duplicate explicit IPs: {dupes}")
         return self
 
 
-def _apply_env_overrides(config: SimulatorConfig) -> SimulatorConfig:
-    """Apply environment variable overrides to the config."""
-    if port := os.environ.get("BACNET_PORT"):
-        config.global_config.bacnet_port = int(port)
-    if api_port := os.environ.get("API_PORT"):
-        config.global_config.api_port = int(api_port)
-    if subnet := os.environ.get("BACNET_SUBNET_MASK"):
-        config.global_config.subnet_mask = int(subnet)
+def _parse_env_int(env_var: str, min_val: int, max_val: int) -> int | None:
+    """Parse an integer environment variable with range validation."""
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return None
+    try:
+        val = int(raw)
+    except ValueError:
+        raise ValueError(f"Environment variable {env_var} must be an integer, got: {raw!r}")
+    if not min_val <= val <= max_val:
+        raise ValueError(f"Environment variable {env_var} must be {min_val}-{max_val}, got: {val}")
+    return val
+
+
+def _apply_env_overrides(config: SimulatorConfig) -> None:
+    """Apply environment variable overrides to the config (mutates in place)."""
+    if (port := _parse_env_int("BACNET_PORT", 1, 65535)) is not None:
+        config.global_config.bacnet_port = port
+    if (api_port := _parse_env_int("API_PORT", 1, 65535)) is not None:
+        config.global_config.api_port = api_port
+    if (subnet := _parse_env_int("BACNET_SUBNET_MASK", 1, 30)) is not None:
+        config.global_config.subnet_mask = subnet
     if profile := os.environ.get("NETWORK_PROFILE"):
         config.global_config.network_profile = NetworkProfileName(profile)
 
     # Override first device settings
     if config.devices:
-        if device_id := os.environ.get("BACNET_DEVICE_ID"):
-            config.devices[0].device_id = int(device_id)
+        if (device_id := _parse_env_int("BACNET_DEVICE_ID", 0, 4194303)) is not None:
+            config.devices[0].device_id = device_id
         if device_name := os.environ.get("BACNET_DEVICE_NAME"):
             config.devices[0].name = device_name
-
-    return config
 
 
 def load_config(config_path: str | Path | None = None) -> SimulatorConfig:
@@ -173,9 +248,9 @@ def load_config(config_path: str | Path | None = None) -> SimulatorConfig:
             devices=[DeviceConfig(**d) for d in devices_raw],
         )
     else:
-        # Use built-in defaults
-        from bacnet_sim.defaults import default_config
+        from bacnet_sim.defaults import default_config  # avoid circular import
 
         config = default_config()
 
-    return _apply_env_overrides(config)
+    _apply_env_overrides(config)
+    return config

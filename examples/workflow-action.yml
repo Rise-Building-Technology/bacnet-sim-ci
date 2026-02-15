@@ -1,0 +1,30 @@
+# Example: Using bacnet-sim-ci as a GitHub Action
+#
+# Uses the action wrapper for a simpler setup experience.
+
+name: BACnet Integration Tests (Action)
+
+on: [push, pull_request]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start BACnet Simulator
+        uses: rise-building-technology/bacnet-sim-ci@v1
+        with:
+          device-id: "1001"
+          device-name: "TestDevice"
+          network-profile: "local-network"
+
+      - name: Run your BACnet integration tests
+        run: |
+          # Simulator is running on localhost:47808 (BACnet) and localhost:8099 (API)
+          curl -s http://localhost:8099/api/devices | python -m json.tool
+
+          # Replace with your test command
+          # pytest tests/integration/ --bacnet-host localhost --bacnet-port 47808
+          echo "Run your BACnet tests here"

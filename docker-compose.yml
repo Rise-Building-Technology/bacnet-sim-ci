@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  bacnet-sim:
+    build: .
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "47808:47808/udp"
+      - "8099:8099"
+    environment:
+      BACNET_DEVICE_ID: "1001"
+      BACNET_DEVICE_NAME: "SimDevice"
+      BACNET_PORT: "47808"
+      API_PORT: "8099"
+    volumes:
+      # Mount custom config (optional, uses built-in default otherwise)
+      # - ./config/example-multi-device.yaml:/app/config/config.yaml
+      []
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks:
+      - bacnet
+
+networks:
+  bacnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.100.0/24
