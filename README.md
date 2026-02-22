@@ -122,6 +122,40 @@ docker run --cap-add=NET_ADMIN \
 
 Set `commandable: true` on any object to allow BACnet WriteProperty.
 
+### Device Templates
+
+Built-in templates provide pre-defined object lists for common HVAC equipment, reducing config boilerplate:
+
+```yaml
+devices:
+  - device_id: 1001
+    name: "AHU-1"
+    template: ahu
+
+  - device_id: 1002
+    name: "VAV-201"
+    template: vav
+
+  - device_id: 1003
+    name: "Boiler-1"
+    template: boiler
+    objects:  # extend/override template objects
+      - type: analog-input
+        instance: 100
+        name: "Custom Sensor"
+        unit: degreesFahrenheit
+        value: 180.0
+```
+
+| Template | Objects | Description |
+|---|---|---|
+| `ahu` | 17 | Air handling unit — temps, pressures, dampers, fans, filters |
+| `vav` | 10 | Variable air volume box — zone temp, airflow, damper, reheat |
+| `boiler` | 14 | Boiler — supply/return temps, firing rate, pumps, safeties |
+| `meter` | 11 | Energy/utility meter — power, energy, voltage, current, demand |
+
+When `template:` and `objects:` are both specified, explicit objects are appended to the template objects.
+
 ### Default Device (Zero Config)
 
 When no config is provided, the simulator starts a single HVAC controller:
