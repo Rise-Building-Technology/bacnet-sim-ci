@@ -84,6 +84,25 @@ def compute_virtual_ips(
     return virtual_ips
 
 
+def _ip_exists(ip: str, interface: str = "eth0") -> bool:
+    """Check if an IP address is already assigned to the interface."""
+    _validate_interface(interface)
+
+    if platform.system() != "Linux":
+        return False
+
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", interface],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return f" {ip}/" in result.stdout
+    except subprocess.CalledProcessError:
+        return False
+
+
 def add_virtual_ip(ip: str, prefix_length: int, interface: str = "eth0") -> bool:
     """Add a virtual IP address to the network interface.
 
@@ -108,6 +127,12 @@ def add_virtual_ip(ip: str, prefix_length: int, interface: str = "eth0") -> bool
     except subprocess.CalledProcessError as e:
         if "RTNETLINK answers: File exists" in e.stderr:
             logger.warning("Virtual IP %s already exists on %s", ip, interface)
+            return True
+        # The entrypoint may have already added IPs as root before dropping
+        # privileges.  If we lack permission, check whether the IP is already
+        # present on the interface and treat that as success.
+        if "Operation not permitted" in e.stderr and _ip_exists(ip, interface):
+            logger.info("Virtual IP %s already present on %s (set up by entrypoint)", ip, interface)
             return True
         logger.error("Failed to add virtual IP %s: %s", ip, e.stderr.strip())
         return False
