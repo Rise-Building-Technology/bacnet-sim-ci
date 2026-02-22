@@ -554,6 +554,58 @@ class TestApplyBacnetLag:
 
         mock_sleep.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_write_handler_calls_original_when_no_drop(self):
+        """do_WritePropertyRequest wrapper should call through with no drop."""
+        bacnet, app = _mock_bacnet_with_app()
+        orig_write = app.do_WritePropertyRequest
+        lag = LagProfile(0, 0, 0)
+        _apply_bacnet_lag(bacnet, lag)
+
+        apdu = MagicMock()
+        await app.do_WritePropertyRequest(apdu)
+
+        orig_write.assert_awaited_once_with(apdu)
+
+    @pytest.mark.asyncio
+    async def test_write_handler_drops_when_drop_probability_is_one(self):
+        """do_WritePropertyRequest wrapper should drop with 100% drop."""
+        bacnet, app = _mock_bacnet_with_app()
+        orig_write = app.do_WritePropertyRequest
+        lag = LagProfile(0, 0, 1.0)
+        _apply_bacnet_lag(bacnet, lag)
+
+        apdu = MagicMock()
+        await app.do_WritePropertyRequest(apdu)
+
+        orig_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_read_multiple_handler_calls_original_when_no_drop(self):
+        """do_ReadPropertyMultipleRequest wrapper should call through with no drop."""
+        bacnet, app = _mock_bacnet_with_app()
+        orig_multi = app.do_ReadPropertyMultipleRequest
+        lag = LagProfile(0, 0, 0)
+        _apply_bacnet_lag(bacnet, lag)
+
+        apdu = MagicMock()
+        await app.do_ReadPropertyMultipleRequest(apdu)
+
+        orig_multi.assert_awaited_once_with(apdu)
+
+    @pytest.mark.asyncio
+    async def test_read_multiple_handler_drops_when_drop_probability_is_one(self):
+        """do_ReadPropertyMultipleRequest wrapper should drop with 100% drop."""
+        bacnet, app = _mock_bacnet_with_app()
+        orig_multi = app.do_ReadPropertyMultipleRequest
+        lag = LagProfile(0, 0, 1.0)
+        _apply_bacnet_lag(bacnet, lag)
+
+        apdu = MagicMock()
+        await app.do_ReadPropertyMultipleRequest(apdu)
+
+        orig_multi.assert_not_awaited()
+
     def test_skips_missing_methods(self):
         """If a do_*Request method doesn't exist, it should be skipped."""
         mock_app = MagicMock(spec=[])  # no methods at all
@@ -577,6 +629,24 @@ class TestApplyBacnetLag:
 
         # The original should still be the true original, not the first wrapper
         assert app.do_ReadPropertyRequest._bacnet_lag_original is orig_read
+
+    @pytest.mark.asyncio
+    @patch("bacnet_sim.lag.asyncio.sleep", new_callable=AsyncMock)
+    async def test_rewrap_uses_new_lag_profile_behavior(self, mock_sleep):
+        """After re-applying lag, only the new profile should affect behavior."""
+        bacnet, app = _mock_bacnet_with_app()
+
+        lag1 = LagProfile(0, 10, 0)
+        _apply_bacnet_lag(bacnet, lag1)
+
+        lag2 = LagProfile(50, 200, 0)
+        _apply_bacnet_lag(bacnet, lag2)
+
+        apdu = MagicMock()
+        await app.do_ReadPropertyRequest(apdu)
+
+        # If wrappers were stacking instead of unwrapping, sleep would be awaited twice.
+        mock_sleep.assert_awaited_once()
 
     @pytest.mark.asyncio
     @patch("bacnet_sim.devices._create_object")

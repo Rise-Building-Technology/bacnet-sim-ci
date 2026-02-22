@@ -218,10 +218,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         device.lag_profile = get_lag_profile(body.profile, custom_config)
         device.config.network_profile = body.profile
 
-        # Re-apply lag to BACnet protocol handlers
+        # Re-apply lag to BACnet protocol handlers, even for zero-lag profiles
+        # so that stale wrappers referencing the old profile are replaced.
         if device.bacnet is not None:
-            if device.lag_profile.max_delay_ms > 0 or device.lag_profile.drop_probability > 0:
-                _apply_bacnet_lag(device.bacnet, device.lag_profile)
+            _apply_bacnet_lag(device.bacnet, device.lag_profile)
 
         return {
             "deviceId": device.device_id,

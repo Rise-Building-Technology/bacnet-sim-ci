@@ -277,8 +277,8 @@ class TestNetworkProfileEndpoint:
         mock_apply_lag.assert_called_once_with(device.bacnet, device.lag_profile)
 
     @patch("bacnet_sim.api._apply_bacnet_lag")
-    def test_update_to_none_profile_skips_bacnet_lag(self, mock_apply_lag):
-        """Changing to 'none' profile should NOT re-apply BACnet lag."""
+    def test_update_to_none_profile_still_reapplies_bacnet_lag(self, mock_apply_lag):
+        """Changing to 'none' profile should still re-apply to clear stale wrappers."""
         device = _make_mock_device()
         app = create_app([device])
         client = TestClient(app)
@@ -287,7 +287,7 @@ class TestNetworkProfileEndpoint:
             json={"profile": "none"},
         )
         assert resp.status_code == 200
-        mock_apply_lag.assert_not_called()
+        mock_apply_lag.assert_called_once_with(device.bacnet, device.lag_profile)
 
 
 class TestLagSimulation:
