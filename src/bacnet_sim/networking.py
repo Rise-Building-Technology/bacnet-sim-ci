@@ -86,6 +86,11 @@ def compute_virtual_ips(
 
 def _ip_exists(ip: str, interface: str = "eth0") -> bool:
     """Check if an IP address is already assigned to the interface."""
+    _validate_interface(interface)
+
+    if platform.system() != "Linux":
+        return False
+
     try:
         result = subprocess.run(
             ["ip", "-4", "-o", "addr", "show", interface],
