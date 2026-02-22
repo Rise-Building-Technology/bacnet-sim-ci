@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   bacnet-sim:
     build: .

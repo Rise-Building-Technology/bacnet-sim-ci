@@ -12,12 +12,12 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesCelsius
+        unit: degreesFahrenheit
         value: 72.5
       - type: analog-output
         instance: 1
         name: "Setpoint"
-        unit: degreesCelsius
+        unit: degreesFahrenheit
         value: 72.0
         commandable: true
       - type: binary-output
@@ -35,12 +35,12 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesCelsius
+        unit: degreesFahrenheit
         value: 68.0
       - type: analog-output
         instance: 1
         name: "Setpoint"
-        unit: degreesCelsius
+        unit: degreesFahrenheit
         value: 70.0
         commandable: true
 
@@ -51,7 +51,7 @@ devices:
       - type: analog-input
         instance: 1
         name: "Discharge Air Temp"
-        unit: degreesCelsius
+        unit: degreesFahrenheit
         value: 60.0
       - type: binary-input
         instance: 1

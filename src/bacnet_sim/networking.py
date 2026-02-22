@@ -174,6 +174,16 @@ def setup_virtual_ips(
             auto_idx += 1
         all_ips.append(ip)
 
+    # Detect collisions between explicit and auto-assigned IPs
+    if len(set(all_ips)) != len(all_ips):
+        seen: set[str] = set()
+        dupes: set[str] = set()
+        for ip in all_ips:
+            if ip in seen:
+                dupes.add(ip)
+            seen.add(ip)
+        raise RuntimeError(f"IP address collision detected: {dupes}")
+
     # Add virtual IPs (skip the primary, it already exists)
     for ip in all_ips:
         if ip != primary_ip:
