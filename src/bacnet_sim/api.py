@@ -45,12 +45,12 @@ class BulkWriteRequest(BaseModel):
 
 class SimulationRequest(BaseModel):
     mode: SimulationMode
-    interval_seconds: float = 5.0
+    interval_seconds: float = Field(5.0, gt=0)
     center: float = 0.0
     amplitude: float = 1.0
-    period_seconds: float = 60.0
+    period_seconds: float = Field(60.0, gt=0)
     initial: float = 0.0
-    step_size: float = 1.0
+    step_size: float = Field(1.0, gt=0)
     min_value: float = float("-inf")
     max_value: float = float("inf")
     values: list[Any] = Field(default_factory=list)
@@ -290,6 +290,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     @app.post("/api/reset")
     async def reset_state() -> dict[str, Any]:
         """Reset all objects to their initial config values."""
+        sim_manager.stop_all()
         reset_count = 0
         for device in devices:
             if device.bacnet is None:
@@ -328,6 +329,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     @app.post("/api/snapshot/{snapshot_id}/restore")
     async def restore_snapshot(snapshot_id: str) -> dict[str, Any]:
         """Restore a previously saved snapshot."""
+        sim_manager.stop_all()
         if snapshot_id not in snapshots:
             raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
         state = snapshots[snapshot_id]
