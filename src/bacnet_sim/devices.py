@@ -7,6 +7,7 @@ using the BAC0 factory pattern, and manages device lifecycle.
 from __future__ import annotations
 
 import logging
+import types
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,6 +83,40 @@ class SimulatedDevice:
                     obj_info["presentValue"] = None
             objects.append(obj_info)
         return objects
+
+
+def _apply_bacnet_lag(bacnet: Any, lag_profile: LagProfile) -> None:
+    """Wrap BACnet protocol handlers to inject lag simulation.
+
+    Monkey-patches do_ReadPropertyRequest, do_WritePropertyRequest, and
+    do_ReadPropertyMultipleRequest on the BAC0 Application instance so
+    that every BACnet/IP response is subject to the same delay/drop
+    behaviour configured by the device's LagProfile.
+    """
+    app = bacnet.this_application.app
+
+    for method_name in (
+        "do_ReadPropertyRequest",
+        "do_WritePropertyRequest",
+        "do_ReadPropertyMultipleRequest",
+    ):
+        original = getattr(app, method_name, None)
+        if original is None:
+            continue
+
+        # If this method was already wrapped, unwrap first to avoid stacking.
+        if isinstance(original, types.FunctionType) and hasattr(original, "_bacnet_lag_original"):
+            original = original._bacnet_lag_original
+
+        async def wrapped(apdu: Any, _orig: Any = original, _lag: LagProfile = lag_profile) -> None:
+            should_proceed = await _lag.apply()
+            if not should_proceed:
+                # Drop: don't respond. BACnet client will timeout.
+                return
+            await _orig(apdu)
+
+        wrapped._bacnet_lag_original = original  # type: ignore[attr-defined]
+        setattr(app, method_name, wrapped)
 
 
 def _create_object(obj_config: ObjectConfig) -> Any | None:
@@ -204,6 +239,11 @@ async def create_device(
 
     device.bacnet = bacnet
     device.initialized = True
+
+    # Apply lag to BACnet protocol responses
+    if lag_profile.max_delay_ms > 0 or lag_profile.drop_probability > 0:
+        _apply_bacnet_lag(bacnet, lag_profile)
+
     logger.info("Device %d (%s) initialized successfully", config.device_id, config.name)
     return device
 

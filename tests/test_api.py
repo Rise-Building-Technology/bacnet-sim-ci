@@ -1,6 +1,6 @@
 """Tests for the FastAPI REST API."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -257,6 +257,37 @@ class TestNetworkProfileEndpoint:
             json={"profile": "none"},
         )
         assert resp.status_code == 404
+
+    @patch("bacnet_sim.api._apply_bacnet_lag")
+    def test_update_profile_reapplies_bacnet_lag(self, mock_apply_lag):
+        """Changing to a non-zero profile should re-apply BACnet lag."""
+        device = _make_mock_device()
+        # Give device a mock bacnet with app
+        mock_app = MagicMock()
+        mock_app.do_ReadPropertyRequest = AsyncMock()
+        device.bacnet.this_application.app = mock_app
+
+        app = create_app([device])
+        client = TestClient(app)
+        resp = client.put(
+            "/api/devices/1001/network-profile",
+            json={"profile": "remote-site"},
+        )
+        assert resp.status_code == 200
+        mock_apply_lag.assert_called_once_with(device.bacnet, device.lag_profile)
+
+    @patch("bacnet_sim.api._apply_bacnet_lag")
+    def test_update_to_none_profile_still_reapplies_bacnet_lag(self, mock_apply_lag):
+        """Changing to 'none' profile should still re-apply to clear stale wrappers."""
+        device = _make_mock_device()
+        app = create_app([device])
+        client = TestClient(app)
+        resp = client.put(
+            "/api/devices/1001/network-profile",
+            json={"profile": "none"},
+        )
+        assert resp.status_code == 200
+        mock_apply_lag.assert_called_once_with(device.bacnet, device.lag_profile)
 
 
 class TestLagSimulation:

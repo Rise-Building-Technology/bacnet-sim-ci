@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from bacnet_sim.config import NetworkCustomConfig, NetworkProfileName, ObjectType
-from bacnet_sim.devices import SimulatedDevice
+from bacnet_sim.devices import SimulatedDevice, _apply_bacnet_lag
 from bacnet_sim.health import check_liveness, check_readiness
 from bacnet_sim.lag import get_lag_profile
 from bacnet_sim.simulation import SimulationConfig, SimulationManager, SimulationMode
@@ -217,6 +217,11 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
         device.lag_profile = get_lag_profile(body.profile, custom_config)
         device.config.network_profile = body.profile
+
+        # Re-apply lag to BACnet protocol handlers, even for zero-lag profiles
+        # so that stale wrappers referencing the old profile are replaced.
+        if device.bacnet is not None:
+            _apply_bacnet_lag(device.bacnet, device.lag_profile)
 
         return {
             "deviceId": device.device_id,
