@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -69,7 +70,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     sim_manager = SimulationManager()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # noqa: ARG001
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
         yield
         sim_manager.stop_all()
 
