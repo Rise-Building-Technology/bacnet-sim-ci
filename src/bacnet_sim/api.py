@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bacnet_sim.config import NetworkCustomConfig, NetworkProfileName, ObjectType
 from bacnet_sim.devices import SimulatedDevice
@@ -23,8 +24,13 @@ class WriteValueRequest(BaseModel):
     value: float | int | str | bool
 
 
+class BulkReadItem(BaseModel):
+    type: str
+    instance: int
+
+
 class BulkReadRequest(BaseModel):
-    objects: list[dict[str, Any]]
+    objects: list[BulkReadItem]
 
 
 class BulkWriteItem(BaseModel):
@@ -47,7 +53,7 @@ class SimulationRequest(BaseModel):
     step_size: float = 1.0
     min_value: float = float("-inf")
     max_value: float = float("inf")
-    values: list[Any] = []
+    values: list[Any] = Field(default_factory=list)
 
 
 class NetworkProfileRequest(BaseModel):
@@ -59,14 +65,20 @@ class NetworkProfileRequest(BaseModel):
 
 def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     """Create the FastAPI application with routes bound to the given devices."""
+    snapshots: dict[str, dict] = {}
+    sim_manager = SimulationManager()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):  # noqa: ARG001
+        yield
+        sim_manager.stop_all()
+
     app = FastAPI(
         title="BACnet Simulator API",
         description="REST API for managing simulated BACnet devices",
         version="0.1.0",
+        lifespan=lifespan,
     )
-
-    snapshots: dict[str, dict] = {}
-    sim_manager = SimulationManager()
 
     def _find_device(device_id: int) -> SimulatedDevice:
         for d in devices:
@@ -173,6 +185,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
         try:
             bacnet_obj = device.get_object(obj_config.name)
+            sim_manager.stop(device.device_id, obj_config.name)
             bacnet_obj.presentValue = body.value
             return {
                 "type": obj_config.type.value,
@@ -217,10 +230,18 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     @app.post("/api/devices/{device_id}/objects/read")
     async def bulk_read_objects(device_id: int, body: BulkReadRequest) -> list[dict[str, Any]]:
         device = _find_device(device_id)
+
+        should_proceed = await device.lag_profile.apply()
+        if not should_proceed:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Simulated network drop for device {device_id}",
+            )
+
         results = []
         for item in body.objects:
-            obj_type = item.get("type", "")
-            instance = item.get("instance", 0)
+            obj_type = item.type
+            instance = item.instance
             obj_config = device.config.find_object(obj_type, instance)
             if obj_config is None:
                 results.append({"type": obj_type, "instance": instance, "error": "not found"})
@@ -240,6 +261,14 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     @app.post("/api/devices/{device_id}/objects/write")
     async def bulk_write_objects(device_id: int, body: BulkWriteRequest) -> dict[str, Any]:
         device = _find_device(device_id)
+
+        should_proceed = await device.lag_profile.apply()
+        if not should_proceed:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Simulated network drop for device {device_id}",
+            )
+
         written = 0
         errors = []
         for item in body.objects:
@@ -249,6 +278,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
                 continue
             try:
                 bacnet_obj = device.get_object(obj_config.name)
+                sim_manager.stop(device.device_id, obj_config.name)
                 bacnet_obj.presentValue = item.value
                 written += 1
             except Exception as e:
@@ -318,10 +348,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
     @app.post("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
     async def start_simulation(
-        device_id: int, object_type: str, instance: int, body: SimulationRequest
+        device_id: int, object_type: ObjectType, instance: int, body: SimulationRequest
     ) -> dict[str, Any]:
         device = _find_device(device_id)
-        obj_config = device.config.find_object(object_type, instance)
+        obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
             raise HTTPException(
                 status_code=404, detail=f"Object {object_type}:{instance} not found"
@@ -349,10 +379,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
     @app.delete("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
     async def stop_simulation(
-        device_id: int, object_type: str, instance: int
+        device_id: int, object_type: ObjectType, instance: int
     ) -> dict[str, Any]:
         device = _find_device(device_id)
-        obj_config = device.config.find_object(object_type, instance)
+        obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
             raise HTTPException(
                 status_code=404, detail=f"Object {object_type}:{instance} not found"
@@ -362,10 +392,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
     @app.get("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
     async def get_simulation_status(
-        device_id: int, object_type: str, instance: int
+        device_id: int, object_type: ObjectType, instance: int
     ) -> dict[str, Any]:
         device = _find_device(device_id)
-        obj_config = device.config.find_object(object_type, instance)
+        obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
             raise HTTPException(
                 status_code=404, detail=f"Object {object_type}:{instance} not found"

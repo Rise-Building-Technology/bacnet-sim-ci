@@ -37,8 +37,6 @@ OBJECT_FACTORIES = {
     ObjectType.CHARACTER_STRING: character_string,
 }
 
-SUPPORTED_OBJECT_TYPES = set(OBJECT_FACTORIES.keys())
-
 
 @dataclass
 class SimulatedDevice:
