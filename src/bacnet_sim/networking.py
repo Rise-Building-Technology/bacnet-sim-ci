@@ -69,7 +69,7 @@ def compute_virtual_ips(
     network = ipaddress.IPv4Network(f"{primary_ip}/{prefix_length}", strict=False)
     primary = ipaddress.IPv4Address(primary_ip)
 
-    virtual_ips = []
+    virtual_ips: list[str] = []
     candidate = primary + 1
     while len(virtual_ips) < count - 1:
         if candidate == network.broadcast_address:

@@ -13,7 +13,12 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 
 # Install with dev dependencies
 pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
 ```
+
+Pre-commit hooks run ruff linting and formatting automatically on each commit.
 
 ## Running Tests
 

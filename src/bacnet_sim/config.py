@@ -85,6 +85,7 @@ class DeviceConfig(BaseModel):
     ip: str | None = None
     network_profile: NetworkProfileName | None = None
     network_custom: NetworkCustomConfig | None = None
+    template: str | None = None
     objects: list[ObjectConfig] = []
 
     @field_validator("device_id")
@@ -103,6 +104,31 @@ class DeviceConfig(BaseModel):
             except ValueError:
                 raise ValueError(f"Invalid IPv4 address: {v}")
         return v
+
+    @model_validator(mode="after")
+    def expand_template(self) -> DeviceConfig:
+        """If a template is set, merge template objects with explicit objects.
+
+        Explicit objects take priority: any template object whose (type, instance)
+        key matches an explicit object is replaced by the explicit one.
+        """
+        if self.template is None:
+            return self
+
+        from bacnet_sim.templates import get_template
+
+        template_objects = get_template(self.template)
+
+        # Build a set of (type, instance) keys from explicit objects
+        explicit_keys = {(obj.type, obj.instance) for obj in self.objects}
+
+        # Start with template objects that are NOT overridden, then add all explicit
+        merged = [
+            obj for obj in template_objects if (obj.type, obj.instance) not in explicit_keys
+        ]
+        merged.extend(self.objects)
+        self.objects = merged
+        return self
 
     @model_validator(mode="after")
     def validate_unique_object_names(self) -> DeviceConfig:
