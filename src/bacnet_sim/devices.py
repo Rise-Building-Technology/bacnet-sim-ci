@@ -108,7 +108,7 @@ def _apply_bacnet_lag(bacnet: Any, lag_profile: LagProfile) -> None:
         if isinstance(original, types.FunctionType) and hasattr(original, "_bacnet_lag_original"):
             original = original._bacnet_lag_original
 
-        async def wrapped(apdu, _orig=original, _lag=lag_profile):
+        async def wrapped(apdu: Any, _orig: Any = original, _lag: LagProfile = lag_profile) -> None:
             should_proceed = await _lag.apply()
             if not should_proceed:
                 # Drop: don't respond. BACnet client will timeout.
