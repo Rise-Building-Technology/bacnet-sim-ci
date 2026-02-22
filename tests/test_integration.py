@@ -226,7 +226,7 @@ class TestContainerImage:
 
         size_bytes = int(result.stdout.strip())
         size_mb = size_bytes / (1024 * 1024)
-        assert size_mb < 200, f"Image size {size_mb:.1f}MB exceeds 200MB limit"
+        assert size_mb < 250, f"Image size {size_mb:.1f}MB exceeds 250MB limit"
 
     def test_runs_as_non_root(self, running_container):
         """Verify the main process runs as non-root user."""

@@ -73,6 +73,16 @@ class TestSetupVirtualIps:
         )
         assert ips == []
 
+    @patch("bacnet_sim.networking.add_virtual_ip", return_value=True)
+    def test_explicit_ip_collision_detected(self, mock_add):
+        with pytest.raises(RuntimeError, match="IP address collision"):
+            setup_virtual_ips(
+                primary_ip="172.18.0.10",
+                prefix_length=24,
+                device_count=3,
+                explicit_ips={1: "172.18.0.11"},  # Collides with auto-assigned
+            )
+
     @patch("bacnet_sim.networking.add_virtual_ip", return_value=False)
     def test_failed_ip_add_raises(self, mock_add):
         with pytest.raises(RuntimeError, match="Failed to add virtual IP"):

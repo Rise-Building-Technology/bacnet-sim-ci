@@ -22,7 +22,7 @@ class TestObjectConfig:
             type=ObjectType.ANALOG_INPUT,
             instance=1,
             name="Zone Temp",
-            unit="degreesCelsius",
+            unit="degreesFahrenheit",
             value=72.5,
         )
         assert obj.type == ObjectType.ANALOG_INPUT
@@ -45,6 +45,22 @@ class TestObjectConfig:
             commandable=True,
         )
         assert obj.commandable is True
+
+    def test_unsupported_object_type_rejected(self):
+        with pytest.raises(ValidationError):
+            ObjectConfig(
+                type="schedule",
+                instance=1,
+                name="Test Schedule",
+            )
+
+    def test_unsupported_trend_log_type_rejected(self):
+        with pytest.raises(ValidationError):
+            ObjectConfig(
+                type="trend-log",
+                instance=1,
+                name="Test Trend Log",
+            )
 
 
 class TestDeviceConfig:
