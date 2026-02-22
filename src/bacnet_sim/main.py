@@ -16,7 +16,6 @@ from bacnet_sim.devices import SimulatedDevice, create_device, shutdown_device
 from bacnet_sim.networking import (
     cleanup_virtual_ips,
     get_primary_ip,
-    remove_virtual_ip,
     setup_virtual_ips,
 )
 
@@ -61,7 +60,6 @@ async def start_devices(config: SimulatorConfig) -> tuple[list[SimulatedDevice],
 
     # Create each device
     devices: list[SimulatedDevice] = []
-    failed_ips: list[str] = []
     for i, dev_config in enumerate(config.devices):
         try:
             device = await create_device(
@@ -74,12 +72,6 @@ async def start_devices(config: SimulatorConfig) -> tuple[list[SimulatedDevice],
             devices.append(device)
         except Exception as e:
             logger.error("Failed to create device %d: %s", dev_config.device_id, e)
-            if ips[i] != primary_ip:
-                failed_ips.append(ips[i])
-
-    # Clean up virtual IPs for devices that failed to start
-    for ip in failed_ips:
-        remove_virtual_ip(ip, prefix_length)
 
     if not devices:
         raise RuntimeError("No devices started successfully")

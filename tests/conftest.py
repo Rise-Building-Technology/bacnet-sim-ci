@@ -22,7 +22,7 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.5
       - type: binary-output
         instance: 1
@@ -53,7 +53,7 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.5
   - device_id: 1002
     name: "AHU-2"
@@ -61,7 +61,7 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 68.0
   - device_id: 1003
     name: "VAV-1"

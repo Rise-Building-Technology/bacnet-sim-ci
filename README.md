@@ -72,12 +72,12 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.5
       - type: analog-output
         instance: 1
         name: "Setpoint"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.0
         commandable: true
       - type: binary-output

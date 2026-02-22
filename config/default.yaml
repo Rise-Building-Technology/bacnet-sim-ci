@@ -11,19 +11,19 @@ devices:
       - type: analog-input
         instance: 1
         name: "Zone Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.5
 
       - type: analog-input
         instance: 2
         name: "Supply Air Temp"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 55.0
 
       - type: analog-output
         instance: 1
         name: "Zone Setpoint"
-        unit: degreesFahrenheit
+        unit: degreesCelsius
         value: 72.0
         commandable: true
 

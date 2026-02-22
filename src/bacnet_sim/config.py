@@ -22,8 +22,8 @@ class ObjectType(StrEnum):
     BINARY_OUTPUT = "binary-output"
     MULTISTATE_VALUE = "multistate-value"
     CHARACTER_STRING = "character-string"
-    # Future: SCHEDULE = "schedule" (not yet implemented)
-    # Future: TREND_LOG = "trend-log" (not yet implemented)
+    SCHEDULE = "schedule"
+    TREND_LOG = "trend-log"
 
 
 class NetworkProfileName(StrEnum):

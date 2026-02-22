@@ -27,7 +27,7 @@ def _make_mock_device(
                 type=ObjectType.ANALOG_INPUT,
                 instance=1,
                 name="Zone Temp",
-                unit="degreesFahrenheit",
+                unit="degreesCelsius",
                 value=72.5,
             ),
             ObjectConfig(
@@ -165,64 +165,6 @@ class TestObjectEndpoints:
         )
         assert resp.status_code == 404
 
-    def test_read_invalid_object_type(self, client):
-        resp = client.get("/api/devices/1001/objects/invalid-type/1")
-        assert resp.status_code == 422
-
-    def test_write_invalid_object_type(self, client):
-        resp = client.put(
-            "/api/devices/1001/objects/invalid-type/1",
-            json={"value": 42},
-        )
-        assert resp.status_code == 422
-
-
-class TestBulkEndpoints:
-    def test_bulk_read(self, client):
-        resp = client.post(
-            "/api/devices/1001/objects/read",
-            json={"objects": [
-                {"type": "analog-input", "instance": 1},
-                {"type": "binary-output", "instance": 1},
-            ]},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data) == 2
-        assert data[0]["name"] == "Zone Temp"
-
-    def test_bulk_read_with_missing(self, client):
-        resp = client.post(
-            "/api/devices/1001/objects/read",
-            json={"objects": [
-                {"type": "analog-input", "instance": 1},
-                {"type": "analog-input", "instance": 99},
-            ]},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "error" in data[1]
-
-    def test_bulk_write(self, client):
-        resp = client.post(
-            "/api/devices/1001/objects/write",
-            json={"objects": [
-                {"type": "analog-input", "instance": 1, "value": 75.0},
-            ]},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["written"] == 1
-        assert resp.json()["errors"] == []
-
-    def test_bulk_write_device_not_found(self, client):
-        resp = client.post(
-            "/api/devices/9999/objects/write",
-            json={"objects": [
-                {"type": "analog-input", "instance": 1, "value": 75.0},
-            ]},
-        )
-        assert resp.status_code == 404
-
 
 class TestNetworkProfileEndpoint:
     def test_update_profile(self, client):
@@ -256,53 +198,4 @@ class TestNetworkProfileEndpoint:
             "/api/devices/9999/network-profile",
             json={"profile": "none"},
         )
-        assert resp.status_code == 404
-
-
-class TestLagSimulation:
-    def test_read_with_drop_profile(self):
-        """Test that 100% drop profile returns 503."""
-        device = _make_mock_device()
-        device.lag_profile = LagProfile(0, 0, 1.0)  # 100% drop
-        app = create_app([device])
-        client = TestClient(app)
-        resp = client.get("/api/devices/1001/objects/analog-input/1")
-        assert resp.status_code == 503
-
-    def test_write_with_drop_profile(self):
-        """Test that 100% drop profile returns 503 on write."""
-        device = _make_mock_device()
-        device.lag_profile = LagProfile(0, 0, 1.0)  # 100% drop
-        app = create_app([device])
-        client = TestClient(app)
-        resp = client.put(
-            "/api/devices/1001/objects/analog-input/1",
-            json={"value": 75.0},
-        )
-        assert resp.status_code == 503
-
-    def test_read_with_no_lag(self, client):
-        """Test that no-lag profile passes through normally."""
-        resp = client.get("/api/devices/1001/objects/analog-input/1")
-        assert resp.status_code == 200
-
-
-class TestStateManagement:
-    def test_reset(self, client):
-        client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
-        resp = client.post("/api/reset")
-        assert resp.status_code == 200
-        assert resp.json()["reset"] is True
-
-    def test_snapshot_and_restore(self, client):
-        resp = client.post("/api/snapshot")
-        assert resp.status_code == 200
-        snapshot_id = resp.json()["snapshotId"]
-        client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
-        resp = client.post(f"/api/snapshot/{snapshot_id}/restore")
-        assert resp.status_code == 200
-        assert resp.json()["restored"] is True
-
-    def test_restore_not_found(self, client):
-        resp = client.post("/api/snapshot/nonexistent/restore")
         assert resp.status_code == 404

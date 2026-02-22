@@ -12,7 +12,6 @@ from typing import Any
 
 import BAC0
 from BAC0.core.devices.local.factory import (
-    ObjectFactory,
     analog_input,
     analog_output,
     binary_input,
@@ -36,8 +35,6 @@ OBJECT_FACTORIES = {
     ObjectType.MULTISTATE_VALUE: multistate_value,
     ObjectType.CHARACTER_STRING: character_string,
 }
-
-SUPPORTED_OBJECT_TYPES = set(OBJECT_FACTORIES.keys())
 
 
 @dataclass
@@ -173,13 +170,6 @@ async def create_device(
         deviceId=config.device_id,
         localObjName=config.name,
     )
-
-    # Clear the shared ObjectFactory state before creating objects for this
-    # device.  BAC0 factory functions accumulate objects in class-level dicts
-    # (ObjectFactory.objects / ObjectFactory.instances).  Without clearing,
-    # objects from a previously created device would leak into this device's
-    # add_objects_to_application() call.
-    ObjectFactory.clear_objects()
 
     # Create all objects using factory pattern.
     # Factory functions return ObjectFactory instances that share a class-level
