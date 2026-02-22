@@ -3,22 +3,51 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from bacnet_sim.config import NetworkCustomConfig, NetworkProfileName
+from bacnet_sim.config import NetworkCustomConfig, NetworkProfileName, ObjectType
 from bacnet_sim.devices import SimulatedDevice
 from bacnet_sim.health import check_liveness, check_readiness
 from bacnet_sim.lag import get_lag_profile
+from bacnet_sim.simulation import SimulationConfig, SimulationManager, SimulationMode
 
 logger = logging.getLogger(__name__)
 
 
 class WriteValueRequest(BaseModel):
     value: float | int | str | bool
+
+
+class BulkReadRequest(BaseModel):
+    objects: list[dict[str, Any]]
+
+
+class BulkWriteItem(BaseModel):
+    type: str
+    instance: int
+    value: float | int | str | bool
+
+
+class BulkWriteRequest(BaseModel):
+    objects: list[BulkWriteItem]
+
+
+class SimulationRequest(BaseModel):
+    mode: SimulationMode
+    interval_seconds: float = 5.0
+    center: float = 0.0
+    amplitude: float = 1.0
+    period_seconds: float = 60.0
+    initial: float = 0.0
+    step_size: float = 1.0
+    min_value: float = float("-inf")
+    max_value: float = float("inf")
+    values: list[Any] = []
 
 
 class NetworkProfileRequest(BaseModel):
@@ -35,6 +64,9 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         description="REST API for managing simulated BACnet devices",
         version="0.1.0",
     )
+
+    snapshots: dict[str, dict] = {}
+    sim_manager = SimulationManager()
 
     def _find_device(device_id: int) -> SimulatedDevice:
         for d in devices:
@@ -81,9 +113,17 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         return device.list_objects()
 
     @app.get("/api/devices/{device_id}/objects/{object_type}/{instance}")
-    async def read_object(device_id: int, object_type: str, instance: int) -> dict[str, Any]:
+    async def read_object(device_id: int, object_type: ObjectType, instance: int) -> dict[str, Any]:
         device = _find_device(device_id)
-        obj_config = device.config.find_object(object_type, instance)
+
+        should_proceed = await device.lag_profile.apply()
+        if not should_proceed:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Simulated network drop for device {device_id}",
+            )
+
+        obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
             raise HTTPException(
                 status_code=404,
@@ -113,10 +153,18 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
     @app.put("/api/devices/{device_id}/objects/{object_type}/{instance}")
     async def write_object(
-        device_id: int, object_type: str, instance: int, body: WriteValueRequest
+        device_id: int, object_type: ObjectType, instance: int, body: WriteValueRequest
     ) -> dict[str, Any]:
         device = _find_device(device_id)
-        obj_config = device.config.find_object(object_type, instance)
+
+        should_proceed = await device.lag_profile.apply()
+        if not should_proceed:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Simulated network drop for device {device_id}",
+            )
+
+        obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
             raise HTTPException(
                 status_code=404,
@@ -162,6 +210,173 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
             "minDelayMs": device.lag_profile.min_delay_ms,
             "maxDelayMs": device.lag_profile.max_delay_ms,
             "dropProbability": device.lag_profile.drop_probability,
+        }
+
+    # --- Bulk read/write endpoints ---
+
+    @app.post("/api/devices/{device_id}/objects/read")
+    async def bulk_read_objects(device_id: int, body: BulkReadRequest) -> list[dict[str, Any]]:
+        device = _find_device(device_id)
+        results = []
+        for item in body.objects:
+            obj_type = item.get("type", "")
+            instance = item.get("instance", 0)
+            obj_config = device.config.find_object(obj_type, instance)
+            if obj_config is None:
+                results.append({"type": obj_type, "instance": instance, "error": "not found"})
+                continue
+            try:
+                bacnet_obj = device.get_object(obj_config.name)
+                results.append({
+                    "type": obj_config.type.value,
+                    "instance": obj_config.instance,
+                    "name": obj_config.name,
+                    "presentValue": bacnet_obj.presentValue,
+                })
+            except Exception:
+                results.append({"type": obj_type, "instance": instance, "error": "read failed"})
+        return results
+
+    @app.post("/api/devices/{device_id}/objects/write")
+    async def bulk_write_objects(device_id: int, body: BulkWriteRequest) -> dict[str, Any]:
+        device = _find_device(device_id)
+        written = 0
+        errors = []
+        for item in body.objects:
+            obj_config = device.config.find_object(item.type, item.instance)
+            if obj_config is None:
+                errors.append({"type": item.type, "instance": item.instance, "error": "not found"})
+                continue
+            try:
+                bacnet_obj = device.get_object(obj_config.name)
+                bacnet_obj.presentValue = item.value
+                written += 1
+            except Exception as e:
+                errors.append({"type": item.type, "instance": item.instance, "error": str(e)})
+        return {"written": written, "errors": errors}
+
+    # --- State management endpoints ---
+
+    @app.post("/api/reset")
+    async def reset_state() -> dict[str, Any]:
+        """Reset all objects to their initial config values."""
+        reset_count = 0
+        for device in devices:
+            if device.bacnet is None:
+                continue
+            for obj_config in device.config.objects:
+                if obj_config.value is not None:
+                    try:
+                        device.bacnet[obj_config.name].presentValue = obj_config.value
+                        reset_count += 1
+                    except Exception:
+                        pass
+        return {"reset": True, "objectsReset": reset_count}
+
+    @app.post("/api/snapshot")
+    async def create_snapshot() -> dict[str, Any]:
+        """Save the current state of all devices."""
+        snapshot_id = str(uuid.uuid4())[:8]
+        state: dict[int, dict[str, Any]] = {}
+        for device in devices:
+            device_state: dict[str, Any] = {}
+            if device.bacnet is None:
+                continue
+            for obj_config in device.config.objects:
+                try:
+                    obj = device.bacnet[obj_config.name]
+                    device_state[obj_config.name] = obj.presentValue
+                except Exception:
+                    pass
+            state[device.device_id] = device_state
+        snapshots[snapshot_id] = state
+        return {
+            "snapshotId": snapshot_id,
+            "devices": len(state),
+        }
+
+    @app.post("/api/snapshot/{snapshot_id}/restore")
+    async def restore_snapshot(snapshot_id: str) -> dict[str, Any]:
+        """Restore a previously saved snapshot."""
+        if snapshot_id not in snapshots:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+        state = snapshots[snapshot_id]
+        restored = 0
+        for device in devices:
+            device_state = state.get(device.device_id, {})
+            if device.bacnet is None:
+                continue
+            for obj_name, value in device_state.items():
+                try:
+                    device.bacnet[obj_name].presentValue = value
+                    restored += 1
+                except Exception:
+                    pass
+        return {"restored": True, "objectsRestored": restored}
+
+    # --- Simulation endpoints ---
+
+    @app.post("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
+    async def start_simulation(
+        device_id: int, object_type: str, instance: int, body: SimulationRequest
+    ) -> dict[str, Any]:
+        device = _find_device(device_id)
+        obj_config = device.config.find_object(object_type, instance)
+        if obj_config is None:
+            raise HTTPException(
+                status_code=404, detail=f"Object {object_type}:{instance} not found"
+            )
+
+        bacnet_obj = device.get_object(obj_config.name)
+        config = SimulationConfig(
+            mode=body.mode,
+            interval_seconds=body.interval_seconds,
+            center=body.center,
+            amplitude=body.amplitude,
+            period_seconds=body.period_seconds,
+            initial=body.initial,
+            step_size=body.step_size,
+            min_value=body.min_value,
+            max_value=body.max_value,
+            values=body.values,
+        )
+
+        def set_value(v: Any) -> None:
+            bacnet_obj.presentValue = v
+
+        sim_manager.start(device.device_id, obj_config.name, config, set_value)
+        return {"status": "started", "mode": body.mode.value, "object": obj_config.name}
+
+    @app.delete("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
+    async def stop_simulation(
+        device_id: int, object_type: str, instance: int
+    ) -> dict[str, Any]:
+        device = _find_device(device_id)
+        obj_config = device.config.find_object(object_type, instance)
+        if obj_config is None:
+            raise HTTPException(
+                status_code=404, detail=f"Object {object_type}:{instance} not found"
+            )
+        stopped = sim_manager.stop(device.device_id, obj_config.name)
+        return {"status": "stopped" if stopped else "not_running", "object": obj_config.name}
+
+    @app.get("/api/devices/{device_id}/objects/{object_type}/{instance}/simulate")
+    async def get_simulation_status(
+        device_id: int, object_type: str, instance: int
+    ) -> dict[str, Any]:
+        device = _find_device(device_id)
+        obj_config = device.config.find_object(object_type, instance)
+        if obj_config is None:
+            raise HTTPException(
+                status_code=404, detail=f"Object {object_type}:{instance} not found"
+            )
+        sim = sim_manager.get(device.device_id, obj_config.name)
+        if sim is None:
+            return {"status": "not_running", "object": obj_config.name}
+        return {
+            "status": "paused" if sim.paused else "running",
+            "mode": sim.config.mode.value,
+            "object": obj_config.name,
         }
 
     return app
