@@ -191,7 +191,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     # --- Health endpoints ---
 
     @app.get("/health/live", response_model=HealthResponse)
-    async def health_live() -> HealthResponse:
+    async def health_live() -> dict[str, Any]:
         return check_liveness()
 
     @app.get("/health/ready")
@@ -203,7 +203,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     # --- Device endpoints ---
 
     @app.get("/api/devices", response_model=list[DeviceSummary])
-    async def list_devices() -> list[DeviceSummary]:
+    async def list_devices() -> list[dict[str, Any]]:
         return [
             {
                 "deviceId": d.device_id,
@@ -222,7 +222,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         ]
 
     @app.get("/api/devices/{device_id}/objects", response_model=list[ObjectSummary])
-    async def list_objects(device_id: int) -> list[ObjectSummary]:
+    async def list_objects(device_id: int) -> list[dict[str, Any]]:
         device = _find_device(device_id)
         return device.list_objects()
 
@@ -232,7 +232,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     )
     async def read_object(
         device_id: int, object_type: ObjectType, instance: int,
-    ) -> ObjectDetail:
+    ) -> dict[str, Any]:
         device = _find_device(device_id)
 
         should_proceed = await device.lag_profile.apply()
@@ -280,7 +280,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         instance: int,
         body: WriteValueRequest,
         force: bool = False,
-    ) -> WriteResponse:
+    ) -> dict[str, Any]:
         device = _find_device(device_id)
 
         should_proceed = await device.lag_profile.apply()
@@ -325,7 +325,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     @app.put("/api/devices/{device_id}/network-profile", response_model=NetworkProfileResponse)
     async def update_network_profile(
         device_id: int, body: NetworkProfileRequest,
-    ) -> NetworkProfileResponse:
+    ) -> dict[str, Any]:
         device = _find_device(device_id)
 
         custom_config = None
@@ -390,7 +390,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         device_id: int,
         body: BulkWriteRequest,
         force: bool = False,
-    ) -> BulkWriteResponse:
+    ) -> dict[str, Any]:
         device = _find_device(device_id)
 
         should_proceed = await device.lag_profile.apply()
@@ -426,7 +426,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     # --- State management endpoints ---
 
     @app.post("/api/reset", response_model=ResetResponse)
-    async def reset_state() -> ResetResponse:
+    async def reset_state() -> dict[str, Any]:
         """Reset all objects to their initial config values."""
         sim_manager.stop_all()
         reset_count = 0
@@ -445,7 +445,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         return {"reset": True, "objectsReset": reset_count, "errors": errors}
 
     @app.post("/api/snapshot", response_model=SnapshotResponse)
-    async def create_snapshot() -> SnapshotResponse:
+    async def create_snapshot() -> dict[str, Any]:
         """Save the current state of all devices."""
         snapshot_id = str(uuid.uuid4())[:8]
         state: dict[int, dict[str, Any]] = {}
@@ -473,7 +473,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         }
 
     @app.post("/api/snapshot/{snapshot_id}/restore", response_model=RestoreResponse)
-    async def restore_snapshot(snapshot_id: str) -> RestoreResponse:
+    async def restore_snapshot(snapshot_id: str) -> dict[str, Any]:
         """Restore a previously saved snapshot."""
         sim_manager.stop_all()
         if snapshot_id not in snapshots:
@@ -495,7 +495,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         return {"restored": True, "objectsRestored": restored, "errors": errors}
 
     @app.delete("/api/snapshot/{snapshot_id}", response_model=DeleteSnapshotResponse)
-    async def delete_snapshot(snapshot_id: str) -> DeleteSnapshotResponse:
+    async def delete_snapshot(snapshot_id: str) -> dict[str, Any]:
         """Delete a specific snapshot."""
         if snapshot_id not in snapshots:
             raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
@@ -503,7 +503,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         return {"deleted": True, "snapshotId": snapshot_id}
 
     @app.delete("/api/snapshots", response_model=DeleteAllSnapshotsResponse)
-    async def delete_all_snapshots() -> DeleteAllSnapshotsResponse:
+    async def delete_all_snapshots() -> dict[str, Any]:
         """Delete all snapshots."""
         count = len(snapshots)
         snapshots.clear()
@@ -517,7 +517,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     )
     async def start_simulation(
         device_id: int, object_type: ObjectType, instance: int, body: SimulationRequest
-    ) -> SimulationStartResponse:
+    ) -> dict[str, str]:
         device = _find_device(device_id)
         obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
@@ -551,7 +551,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     )
     async def stop_simulation(
         device_id: int, object_type: ObjectType, instance: int
-    ) -> SimulationStopResponse:
+    ) -> dict[str, str]:
         device = _find_device(device_id)
         obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
@@ -567,7 +567,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
     )
     async def get_simulation_status(
         device_id: int, object_type: ObjectType, instance: int
-    ) -> SimulationStatusResponse:
+    ) -> dict[str, str | None]:
         device = _find_device(device_id)
         obj_config = device.config.find_object(object_type.value, instance)
         if obj_config is None:
