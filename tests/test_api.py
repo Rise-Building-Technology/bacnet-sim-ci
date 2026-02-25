@@ -153,7 +153,22 @@ class TestObjectEndpoints:
 
     def test_write_object(self, client):
         resp = client.put(
+            "/api/devices/1001/objects/binary-output/1",
+            json={"value": True},
+        )
+        assert resp.status_code == 200
+
+    def test_write_non_commandable_returns_400(self, client):
+        resp = client.put(
             "/api/devices/1001/objects/analog-input/1",
+            json={"value": 75.0},
+        )
+        assert resp.status_code == 400
+        assert "not commandable" in resp.json()["detail"]
+
+    def test_write_non_commandable_with_force(self, client):
+        resp = client.put(
+            "/api/devices/1001/objects/analog-input/1?force=true",
             json={"value": 75.0},
         )
         assert resp.status_code == 200
@@ -206,6 +221,30 @@ class TestBulkEndpoints:
     def test_bulk_write(self, client):
         resp = client.post(
             "/api/devices/1001/objects/write",
+            json={"objects": [
+                {"type": "binary-output", "instance": 1, "value": True},
+            ]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["written"] == 1
+        assert resp.json()["errors"] == []
+
+    def test_bulk_write_non_commandable_returns_error(self, client):
+        resp = client.post(
+            "/api/devices/1001/objects/write",
+            json={"objects": [
+                {"type": "analog-input", "instance": 1, "value": 75.0},
+            ]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["written"] == 0
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["error"] == "not commandable"
+
+    def test_bulk_write_non_commandable_with_force(self, client):
+        resp = client.post(
+            "/api/devices/1001/objects/write?force=true",
             json={"objects": [
                 {"type": "analog-input", "instance": 1, "value": 75.0},
             ]},
@@ -318,12 +357,80 @@ class TestLagSimulation:
         assert resp.status_code == 200
 
 
+class TestSimulationEndpoints:
+    def test_start_simulation(self, client):
+        """Start a sine simulation on an object."""
+        resp = client.post(
+            "/api/devices/1001/objects/analog-input/1/simulate",
+            json={"mode": "sine", "interval_seconds": 1.0, "center": 72.0, "amplitude": 5.0},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "started"
+        assert data["mode"] == "sine"
+        assert data["object"] == "Zone Temp"
+
+    def test_stop_simulation(self, client):
+        """Stop a running simulation."""
+        # Start first
+        client.post(
+            "/api/devices/1001/objects/analog-input/1/simulate",
+            json={"mode": "sine"},
+        )
+        # Stop
+        resp = client.delete("/api/devices/1001/objects/analog-input/1/simulate")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "stopped"
+
+    def test_stop_nonrunning_simulation(self, client):
+        """Stopping a simulation that isn't running returns not_running."""
+        resp = client.delete("/api/devices/1001/objects/analog-input/1/simulate")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "not_running"
+
+    def test_get_simulation_status_not_running(self, client):
+        """Getting status of a non-running simulation."""
+        resp = client.get("/api/devices/1001/objects/analog-input/1/simulate")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "not_running"
+
+    def test_get_simulation_status_running(self, client):
+        """Getting status of a running simulation."""
+        client.post(
+            "/api/devices/1001/objects/analog-input/1/simulate",
+            json={"mode": "step", "values": [1, 2, 3]},
+        )
+        resp = client.get("/api/devices/1001/objects/analog-input/1/simulate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "running"
+        assert data["mode"] == "step"
+
+    def test_simulate_nonexistent_object(self, client):
+        """Simulating a nonexistent object returns 404."""
+        resp = client.post(
+            "/api/devices/1001/objects/analog-input/99/simulate",
+            json={"mode": "sine"},
+        )
+        assert resp.status_code == 404
+
+    def test_simulate_nonexistent_device(self, client):
+        """Simulating on a nonexistent device returns 404."""
+        resp = client.post(
+            "/api/devices/9999/objects/analog-input/1/simulate",
+            json={"mode": "sine"},
+        )
+        assert resp.status_code == 404
+
+
 class TestStateManagement:
     def test_reset(self, client):
         client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
         resp = client.post("/api/reset")
         assert resp.status_code == 200
-        assert resp.json()["reset"] is True
+        data = resp.json()
+        assert data["reset"] is True
+        assert "errors" in data
 
     def test_snapshot_and_restore(self, client):
         resp = client.post("/api/snapshot")
@@ -332,8 +439,31 @@ class TestStateManagement:
         client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
         resp = client.post(f"/api/snapshot/{snapshot_id}/restore")
         assert resp.status_code == 200
-        assert resp.json()["restored"] is True
+        data = resp.json()
+        assert data["restored"] is True
+        assert "errors" in data
 
     def test_restore_not_found(self, client):
         resp = client.post("/api/snapshot/nonexistent/restore")
         assert resp.status_code == 404
+
+    def test_delete_snapshot(self, client):
+        resp = client.post("/api/snapshot")
+        assert resp.status_code == 200
+        snapshot_id = resp.json()["snapshotId"]
+        resp = client.delete(f"/api/snapshot/{snapshot_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted"] is True
+        assert data["snapshotId"] == snapshot_id
+
+    def test_delete_snapshot_not_found(self, client):
+        resp = client.delete("/api/snapshot/nonexistent")
+        assert resp.status_code == 404
+
+    def test_delete_all_snapshots(self, client):
+        client.post("/api/snapshot")
+        client.post("/api/snapshot")
+        resp = client.delete("/api/snapshots")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 2

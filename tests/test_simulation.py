@@ -1,10 +1,16 @@
 """Tests for value simulation engine."""
 
 import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bacnet_sim.simulation import SimulationConfig, SimulationMode, SimulationTask
+from bacnet_sim.simulation import (
+    SimulationConfig,
+    SimulationManager,
+    SimulationMode,
+    SimulationTask,
+)
 
 
 class TestSimulationTask:
@@ -83,3 +89,89 @@ class TestSimulationTask:
         await asyncio.sleep(0.15)
         sim.stop()
         assert len(values) > count_during_pause  # Values resumed
+
+
+def _make_mock_task() -> MagicMock:
+    """Return a MagicMock that behaves like a non-done asyncio.Task.
+
+    Both ``done`` and ``cancel`` are plain (non-async) mocks so that calling
+    them inside SimulationTask.stop() never produces an unawaited-coroutine.
+    The ``spec`` is intentionally restricted to those two attributes so that
+    pytest's async-mock introspection does not auto-wrap anything as a
+    coroutine.
+    """
+    mock_task = MagicMock(spec=["done", "cancel"])
+    mock_task.done.return_value = False
+    mock_task.cancel.return_value = True
+    return mock_task
+
+
+def _patch_create_task():
+    """Patch ``asyncio.create_task`` so no event loop is required.
+
+    The coroutine argument passed to ``create_task`` is intentionally closed
+    (via ``.close()``) to prevent Python from emitting an unawaited-coroutine
+    ``ResourceWarning``.
+    """
+    def _fake_create_task(coro, **kwargs):
+        # Discard the coroutine cleanly so it is not flagged as never-awaited.
+        coro.close()
+        return _make_mock_task()
+
+    return patch("asyncio.create_task", side_effect=_fake_create_task)
+
+
+class TestSimulationManager:
+    def test_start_creates_task(self):
+        with _patch_create_task():
+            mgr = SimulationManager()
+            config = SimulationConfig(mode=SimulationMode.SINE, interval_seconds=1.0)
+            sim = mgr.start(1001, "Zone Temp", config, lambda v: None)
+            assert sim.running
+
+    def test_stop_returns_true_when_running(self):
+        with _patch_create_task():
+            mgr = SimulationManager()
+            config = SimulationConfig(mode=SimulationMode.SINE, interval_seconds=1.0)
+            mgr.start(1001, "Zone Temp", config, lambda v: None)
+            assert mgr.stop(1001, "Zone Temp") is True
+
+    def test_stop_returns_false_when_not_running(self):
+        mgr = SimulationManager()
+        assert mgr.stop(1001, "Zone Temp") is False
+
+    def test_get_returns_none_when_not_running(self):
+        mgr = SimulationManager()
+        assert mgr.get(1001, "Zone Temp") is None
+
+    def test_get_returns_task_when_running(self):
+        with _patch_create_task():
+            mgr = SimulationManager()
+            config = SimulationConfig(mode=SimulationMode.SINE, interval_seconds=1.0)
+            mgr.start(1001, "Zone Temp", config, lambda v: None)
+            assert mgr.get(1001, "Zone Temp") is not None
+
+    def test_stop_all(self):
+        with _patch_create_task():
+            mgr = SimulationManager()
+            config = SimulationConfig(mode=SimulationMode.SINE, interval_seconds=1.0)
+            mgr.start(1001, "Temp1", config, lambda v: None)
+            mgr.start(1001, "Temp2", config, lambda v: None)
+            mgr.stop_all()
+            assert mgr.get(1001, "Temp1") is None
+            assert mgr.get(1001, "Temp2") is None
+
+    def test_start_replaces_existing(self):
+        with _patch_create_task():
+            mgr = SimulationManager()
+            config1 = SimulationConfig(
+                mode=SimulationMode.SINE, interval_seconds=1.0,
+            )
+            config2 = SimulationConfig(
+                mode=SimulationMode.STEP, interval_seconds=2.0, values=[1, 2],
+            )
+            mgr.start(1001, "Zone Temp", config1, lambda v: None)
+            mgr.start(1001, "Zone Temp", config2, lambda v: None)
+            sim = mgr.get(1001, "Zone Temp")
+            assert sim is not None
+            assert sim.config.mode == SimulationMode.STEP
