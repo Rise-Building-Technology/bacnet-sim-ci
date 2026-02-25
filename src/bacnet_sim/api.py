@@ -113,9 +113,23 @@ class NetworkProfileResponse(BaseModel):
     dropProbability: float
 
 
+class BulkReadResponseItem(BaseModel):
+    type: str
+    instance: int
+    name: str | None = None
+    presentValue: Any = None
+    error: str | None = None
+
+
+class BulkWriteError(BaseModel):
+    type: str
+    instance: int
+    error: str
+
+
 class BulkWriteResponse(BaseModel):
     written: int
-    errors: list[dict[str, Any]]
+    errors: list[BulkWriteError] = Field(default_factory=list)
 
 
 class ResetResponse(BaseModel):
@@ -146,7 +160,7 @@ class DeleteAllSnapshotsResponse(BaseModel):
 
 class SimulationStartResponse(BaseModel):
     status: str
-    mode: str
+    mode: SimulationMode
     object: str
 
 
@@ -158,7 +172,7 @@ class SimulationStopResponse(BaseModel):
 class SimulationStatusResponse(BaseModel):
     status: str
     object: str
-    mode: str | None = None
+    mode: SimulationMode | None = None
 
 
 _MAX_SNAPSHOTS = 100
@@ -261,7 +275,9 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
             try:
                 result["statusFlags"] = list(bacnet_obj.statusFlags)
             except Exception:
-                logger.debug("Could not read statusFlags for %s", obj_config.name)
+                logger.debug(
+                    "Could not read statusFlags for %s", obj_config.name, exc_info=True,
+                )
             return result
         except Exception:
             logger.exception(
@@ -354,8 +370,13 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
 
     # --- Bulk read/write endpoints ---
 
-    @app.post("/api/devices/{device_id}/objects/read", response_model=list[dict[str, Any]])
-    async def bulk_read_objects(device_id: int, body: BulkReadRequest) -> list[dict[str, Any]]:
+    @app.post(
+        "/api/devices/{device_id}/objects/read",
+        response_model=list[BulkReadResponseItem],
+    )
+    async def bulk_read_objects(
+        device_id: int, body: BulkReadRequest,
+    ) -> list[dict[str, Any]]:
         device = _find_device(device_id)
 
         should_proceed = await device.lag_profile.apply()
@@ -440,7 +461,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
                         device.bacnet[obj_config.name].presentValue = obj_config.value
                         reset_count += 1
                     except Exception as e:
-                        logger.warning("Failed to reset %s: %s", obj_config.name, e)
+                        logger.warning(
+                            "Failed to reset %s on device %d: %s",
+                            obj_config.name, device.device_id, e,
+                        )
                         errors += 1
         return {"reset": True, "objectsReset": reset_count, "errors": errors}
 
@@ -460,7 +484,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
                 except Exception:
                     logger.debug(
                         "Could not read presentValue for %s on device %d",
-                        obj_config.name, device.device_id,
+                        obj_config.name, device.device_id, exc_info=True,
                     )
             state[device.device_id] = device_state
         if len(snapshots) >= _MAX_SNAPSHOTS:
@@ -490,7 +514,10 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
                     device.bacnet[obj_name].presentValue = value
                     restored += 1
                 except Exception as e:
-                    logger.warning("Failed to restore %s: %s", obj_name, e)
+                    logger.warning(
+                        "Failed to restore %s on device %d from snapshot %s: %s",
+                        obj_name, device.device_id, snapshot_id, e,
+                    )
                     errors += 1
         return {"restored": True, "objectsRestored": restored, "errors": errors}
 
@@ -543,7 +570,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
             bacnet_obj.presentValue = v
 
         sim_manager.start(device.device_id, obj_config.name, config, set_value)
-        return {"status": "started", "mode": body.mode.value, "object": obj_config.name}
+        return {"status": "started", "mode": body.mode, "object": obj_config.name}
 
     @app.delete(
         "/api/devices/{device_id}/objects/{object_type}/{instance}/simulate",
@@ -579,7 +606,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
             return {"status": "not_running", "object": obj_config.name}
         return {
             "status": "paused" if sim.paused else "running",
-            "mode": sim.config.mode.value,
+            "mode": sim.config.mode,
             "object": obj_config.name,
         }
 
