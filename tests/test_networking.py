@@ -30,6 +30,14 @@ class TestComputeVirtualIps:
         with pytest.raises(RuntimeError, match="too small"):
             compute_virtual_ips("10.0.0.1", 30, count=5)
 
+    def test_subnet_too_small_overshoot(self):
+        # /30 subnet has only 2 usable hosts; requesting 10 devices causes the
+        # candidate to overshoot the broadcast address, which previously caused
+        # an infinite loop because the == guard was never triggered once the
+        # candidate went past the broadcast address.
+        with pytest.raises(RuntimeError, match="too small"):
+            compute_virtual_ips("192.168.1.1", 30, 10)
+
     def test_zero_devices(self):
         ips = compute_virtual_ips("172.18.0.10", 24, count=0)
         assert ips == []

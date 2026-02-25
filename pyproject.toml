@@ -46,6 +46,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/bacnet_sim/api.py" = ["N815"]  # Allow camelCase in Pydantic response models (API contract)
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true

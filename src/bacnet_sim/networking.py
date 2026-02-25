@@ -72,12 +72,12 @@ def compute_virtual_ips(
     virtual_ips: list[str] = []
     candidate = primary + 1
     while len(virtual_ips) < count - 1:
-        if candidate == network.broadcast_address:
+        if candidate >= network.broadcast_address or candidate not in network:
             raise RuntimeError(
                 f"Subnet {network} too small for {count} devices "
                 f"(only {network.num_addresses - 2} usable hosts)"
             )
-        if candidate != primary and candidate in network:
+        if candidate != primary:
             virtual_ips.append(str(candidate))
         candidate += 1
 

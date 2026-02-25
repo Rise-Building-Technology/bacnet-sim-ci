@@ -69,9 +69,10 @@ runs:
           IMAGE="bacnet-sim-ci:local"
         fi
 
-        CONFIG_MOUNT=""
+        DOCKER_ARGS=()
         if [ -n "$INPUT_CONFIG_FILE" ]; then
-          CONFIG_MOUNT="-v $(realpath "$INPUT_CONFIG_FILE"):/app/config/custom.yaml -e CONFIG_FILE=/app/config/custom.yaml"
+          DOCKER_ARGS+=(-v "$(realpath "$INPUT_CONFIG_FILE"):/app/config/custom.yaml")
+          DOCKER_ARGS+=(-e "CONFIG_FILE=/app/config/custom.yaml")
         fi
 
         docker run -d \
@@ -84,7 +85,7 @@ runs:
           -e "BACNET_PORT=${INPUT_PORT}" \
           -e "API_PORT=${INPUT_API_PORT}" \
           -e "NETWORK_PROFILE=${INPUT_NETWORK_PROFILE}" \
-          $CONFIG_MOUNT \
+          "${DOCKER_ARGS[@]}" \
           "$IMAGE"
 
         # Wait for readiness
