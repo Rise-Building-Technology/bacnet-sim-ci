@@ -214,7 +214,7 @@ curl http://localhost:8099/api/devices/1001/objects/analog-input/1
 # Write
 curl -X PUT http://localhost:8099/api/devices/1001/objects/analog-input/1 \
   -H "Content-Type: application/json" \
-  -d '{"value": 75.0}'
+  -d '{"presentValue": 75.0}'
 ```
 
 ### Change Network Profile at Runtime

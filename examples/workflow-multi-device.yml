@@ -35,7 +35,7 @@ jobs:
           # Set zone temperature on device 1001
           curl -s -X PUT http://localhost:8099/api/devices/1001/objects/analog-input/1 \
             -H "Content-Type: application/json" \
-            -d '{"value": 75.0}' | python -m json.tool
+            -d '{"presentValue": 75.0}' | python -m json.tool
 
       - name: Run your BACnet integration tests
         run: |
