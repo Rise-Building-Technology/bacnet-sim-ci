@@ -21,8 +21,7 @@ jobs:
       bacnet-sim:
         image: ghcr.io/rise-building-technology/bacnet-sim-ci:latest
         ports:
-          - 47808:47808/udp
-          - 8099:8099
+          - 8099:8099  # REST only — no UDP mapping; see workflow-bacnet-protocol.yml for protocol-level testing
         env:
           BACNET_DEVICE_ID: "1001"
           BACNET_DEVICE_NAME: "TestDevice"

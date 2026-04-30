@@ -41,10 +41,13 @@ jobs:
           for i in $(seq 1 30); do
             if docker exec bacnet-sim curl -sf http://localhost:8099/health/ready > /dev/null; then
               echo "Simulator ready"
-              break
+              exit 0
             fi
             sleep 1
           done
+          echo "Simulator did not become ready within 30 seconds"
+          docker logs bacnet-sim
+          exit 1
 
       - name: Build your test client image
         run: docker build -t bacnet-test-client .

@@ -16,8 +16,7 @@ services:
   bacnet-sim:
     image: ghcr.io/rise-building-technology/bacnet-sim-ci:latest
     ports:
-      - 47808:47808/udp
-      - 8099:8099
+      - 8099:8099  # REST only; see below for BACnet/IP UDP
     options: >-
       --cap-add=NET_ADMIN
       --health-cmd "curl -f http://localhost:8099/health/ready || exit 1"
