@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class WriteValueRequest(BaseModel):
-    value: float | int | str | bool
+    presentValue: float | int | str | bool
 
 
 class BulkReadItem(BaseModel):
@@ -37,7 +37,7 @@ class BulkReadRequest(BaseModel):
 class BulkWriteItem(BaseModel):
     type: str
     instance: int
-    value: float | int | str | bool
+    presentValue: float | int | str | bool
 
 
 class BulkWriteRequest(BaseModel):
@@ -322,7 +322,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
         try:
             bacnet_obj = device.get_object(obj_config.name)
             sim_manager.stop(device.device_id, obj_config.name)
-            bacnet_obj.presentValue = body.value
+            bacnet_obj.presentValue = body.presentValue
             return {
                 "type": obj_config.type.value,
                 "instance": obj_config.instance,
@@ -438,7 +438,7 @@ def create_app(devices: list[SimulatedDevice]) -> FastAPI:
             try:
                 bacnet_obj = device.get_object(obj_config.name)
                 sim_manager.stop(device.device_id, obj_config.name)
-                bacnet_obj.presentValue = item.value
+                bacnet_obj.presentValue = item.presentValue
                 written += 1
             except Exception as e:
                 errors.append({"type": item.type, "instance": item.instance, "error": str(e)})

@@ -154,14 +154,14 @@ class TestObjectEndpoints:
     def test_write_object(self, client):
         resp = client.put(
             "/api/devices/1001/objects/binary-output/1",
-            json={"value": True},
+            json={"presentValue": True},
         )
         assert resp.status_code == 200
 
     def test_write_non_commandable_returns_400(self, client):
         resp = client.put(
             "/api/devices/1001/objects/analog-input/1",
-            json={"value": 75.0},
+            json={"presentValue": 75.0},
         )
         assert resp.status_code == 400
         assert "not commandable" in resp.json()["detail"]
@@ -169,14 +169,14 @@ class TestObjectEndpoints:
     def test_write_non_commandable_with_force(self, client):
         resp = client.put(
             "/api/devices/1001/objects/analog-input/1?force=true",
-            json={"value": 75.0},
+            json={"presentValue": 75.0},
         )
         assert resp.status_code == 200
 
     def test_write_object_not_found(self, client):
         resp = client.put(
             "/api/devices/1001/objects/analog-input/99",
-            json={"value": 75.0},
+            json={"presentValue": 75.0},
         )
         assert resp.status_code == 404
 
@@ -187,7 +187,7 @@ class TestObjectEndpoints:
     def test_write_invalid_object_type(self, client):
         resp = client.put(
             "/api/devices/1001/objects/invalid-type/1",
-            json={"value": 42},
+            json={"presentValue": 42},
         )
         assert resp.status_code == 422
 
@@ -222,7 +222,7 @@ class TestBulkEndpoints:
         resp = client.post(
             "/api/devices/1001/objects/write",
             json={"objects": [
-                {"type": "binary-output", "instance": 1, "value": True},
+                {"type": "binary-output", "instance": 1, "presentValue": True},
             ]},
         )
         assert resp.status_code == 200
@@ -233,7 +233,7 @@ class TestBulkEndpoints:
         resp = client.post(
             "/api/devices/1001/objects/write",
             json={"objects": [
-                {"type": "analog-input", "instance": 1, "value": 75.0},
+                {"type": "analog-input", "instance": 1, "presentValue": 75.0},
             ]},
         )
         assert resp.status_code == 200
@@ -246,7 +246,7 @@ class TestBulkEndpoints:
         resp = client.post(
             "/api/devices/1001/objects/write?force=true",
             json={"objects": [
-                {"type": "analog-input", "instance": 1, "value": 75.0},
+                {"type": "analog-input", "instance": 1, "presentValue": 75.0},
             ]},
         )
         assert resp.status_code == 200
@@ -257,7 +257,7 @@ class TestBulkEndpoints:
         resp = client.post(
             "/api/devices/9999/objects/write",
             json={"objects": [
-                {"type": "analog-input", "instance": 1, "value": 75.0},
+                {"type": "analog-input", "instance": 1, "presentValue": 75.0},
             ]},
         )
         assert resp.status_code == 404
@@ -347,7 +347,7 @@ class TestLagSimulation:
         client = TestClient(app)
         resp = client.put(
             "/api/devices/1001/objects/analog-input/1",
-            json={"value": 75.0},
+            json={"presentValue": 75.0},
         )
         assert resp.status_code == 503
 
@@ -425,7 +425,11 @@ class TestSimulationEndpoints:
 
 class TestStateManagement:
     def test_reset(self, client):
-        client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
+        resp = client.put(
+            "/api/devices/1001/objects/analog-input/1?force=true",
+            json={"presentValue": 99.0},
+        )
+        assert resp.status_code == 200
         resp = client.post("/api/reset")
         assert resp.status_code == 200
         data = resp.json()
@@ -436,7 +440,11 @@ class TestStateManagement:
         resp = client.post("/api/snapshot")
         assert resp.status_code == 200
         snapshot_id = resp.json()["snapshotId"]
-        client.put("/api/devices/1001/objects/analog-input/1", json={"value": 99.0})
+        write_resp = client.put(
+            "/api/devices/1001/objects/analog-input/1?force=true",
+            json={"presentValue": 99.0},
+        )
+        assert write_resp.status_code == 200
         resp = client.post(f"/api/snapshot/{snapshot_id}/restore")
         assert resp.status_code == 200
         data = resp.json()

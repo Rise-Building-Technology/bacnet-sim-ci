@@ -184,7 +184,7 @@ class TestContainerAPI:
         # Write a new value to Zone Setpoint (analog-output instance 1)
         write_resp = requests.put(
             f"http://localhost:{API_PORT}/api/devices/{device_id}/objects/analog-output/1",
-            json={"value": 68.0},
+            json={"presentValue": 68.0},
         )
         assert write_resp.status_code == 200
 
