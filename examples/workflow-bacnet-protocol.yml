@@ -1,0 +1,64 @@
+# Example: Protocol-level BACnet testing via the sibling-container pattern
+#
+# Use this when your test client speaks BACnet/IP UDP (not just the REST API).
+# The standard `services:` keyword routes UDP through docker-proxy, which drops
+# BACnet packets in practice — REST works, but readProperty/Who-Is time out.
+#
+# Pattern: create a custom Docker network with fixed IPs, then run BOTH the
+# simulator and your test client as sibling containers on it. UDP becomes a
+# direct peer-to-peer flow on the same /24 with no NAT.
+#
+# Verified in production at bitpool/edge-bacnet#44 (Node-RED + edge-bacnet
+# discovers the sim in ~7s).
+
+name: BACnet Protocol Tests
+
+on: [push, pull_request]
+
+jobs:
+  bacnet-protocol-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test network
+        run: docker network create --subnet=172.20.0.0/24 bacnet-test-net
+
+      - name: Start BACnet simulator on the test network
+        run: |
+          docker run -d \
+            --name bacnet-sim \
+            --network bacnet-test-net \
+            --ip 172.20.0.10 \
+            --cap-add=NET_ADMIN \
+            -e BACNET_DEVICE_ID=1001 \
+            -e BACNET_DEVICE_NAME=TestDevice \
+            ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+
+      - name: Wait for simulator readiness
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec bacnet-sim curl -sf http://localhost:8099/health/ready > /dev/null; then
+              echo "Simulator ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Build your test client image
+        run: docker build -t bacnet-test-client .
+
+      - name: Run BACnet test client as a sibling container
+        run: |
+          docker run --rm \
+            --name client \
+            --network bacnet-test-net \
+            --ip 172.20.0.20 \
+            -e BACNET_TARGET_IP=172.20.0.10 \
+            -e BACNET_TARGET_PORT=47808 \
+            bacnet-test-client
+
+      - name: Dump simulator logs on failure
+        if: failure()
+        run: docker logs bacnet-sim

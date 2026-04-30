@@ -1,7 +1,13 @@
-# Example: Using bacnet-sim-ci as a GitHub Actions service container
+# Example: REST-only integration testing via a GitHub Actions service container
 #
-# This is the recommended approach for long-running integration tests.
-# The simulator runs as a sidecar alongside your test job.
+# Use this when your tests only need the HTTP REST API (read/write objects,
+# snapshot, simulate). REST is reliably reachable from the runner host on
+# `localhost:8099` because docker-proxy handles TCP cleanly.
+#
+# DO NOT use this pattern if your test client speaks BACnet/IP UDP directly —
+# docker-proxy drops UDP packets across the bridge and BACnet readProperty /
+# Who-Is will time out even though the REST healthcheck passes. For protocol-
+# level testing see `workflow-bacnet-protocol.yml` (sibling-container pattern).
 
 name: BACnet Integration Tests
 

@@ -7,7 +7,9 @@ BACnet device simulator for CI pipelines. Runs as a Docker container or GitHub A
 
 ## Quick Start
 
-### GitHub Actions (Service Container)
+### GitHub Actions (Service Container — REST-only)
+
+For tests that only use the HTTP REST API:
 
 ```yaml
 services:
@@ -24,6 +26,8 @@ services:
       --health-retries 10
       --health-start-period 15s
 ```
+
+**If your test client speaks BACnet/IP UDP directly, do not use the `services:` pattern** — docker-proxy drops UDP packets across the bridge. See [Networking → Choosing a pattern](#choosing-a-pattern) and [`examples/workflow-bacnet-protocol.yml`](examples/workflow-bacnet-protocol.yml).
 
 ### GitHub Action
 
@@ -279,7 +283,40 @@ networks:
 
 ### GitHub Actions
 
-When using service containers, the simulator is accessible via `localhost` on the mapped ports. For BACnet protocol access, use the virtual IPs returned by `GET /api/devices`.
+#### Choosing a pattern
+
+| Your test client uses... | Use this pattern | Example |
+|---|---|---|
+| HTTP REST API only | `services:` container | [`workflow-service-container.yml`](examples/workflow-service-container.yml) |
+| BACnet/IP UDP directly | Sibling-container on a custom network | [`workflow-bacnet-protocol.yml`](examples/workflow-bacnet-protocol.yml) |
+
+The `services:` keyword routes container ports through docker-proxy. TCP (REST) works fine, but **UDP packets are unreliable across the bridge** — BACnet `readProperty` / Who-Is calls time out even when the REST healthcheck passes. If your tests use BACnet protocol calls, run your test client as a sibling container on a custom Docker network with fixed IPs so UDP becomes a direct peer-to-peer flow with no NAT.
+
+If REST works but your BACnet client gets timeouts, the test client is almost certainly on the runner host instead of inside a sibling container.
+
+#### Healthcheck context
+
+The `--health-cmd` from the `services:` example runs **inside the simulator's own container**, where `localhost:8099` is the sim's REST API. From the runner host you reach the API via the `ports:` mapping (`localhost:8099`); from a sibling container you reach it directly by service hostname (`bacnet-sim:8099`).
+
+#### Pinning the image for deterministic CI
+
+`:latest` follows new builds and can change without warning. For reproducible CI, pin by digest:
+
+```yaml
+image: ghcr.io/rise-building-technology/bacnet-sim-ci@sha256:29ed481aa6015dc3508a5aec5b2cb5a69c86bdc2ef22bb7ecb0d75c0d7745963
+```
+
+Get the current digest with:
+
+```bash
+docker buildx imagetools inspect ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+```
+
+Bump the digest in your workflow after testing the new build locally.
+
+#### Image platforms
+
+Published as a multi-arch manifest covering `linux/amd64` and `linux/arm64`. Verify with `docker manifest inspect ghcr.io/rise-building-technology/bacnet-sim-ci:latest`.
 
 ## Resource Usage
 
@@ -298,7 +335,7 @@ Each BAC0 device instance uses roughly 30-50 MB. The base process (Python + Fast
 - **BACnet/IP only** (no MSTP, no BACnet/SC)
 - **No COV subscriptions** (Change of Value notifications)
 - **No BBMD** (Broadcast Management Device)
-- **Test client must be on the same Docker network** for BACnet broadcast discovery
+- **Test client must be on the same Docker network** for BACnet broadcast discovery (and a sibling container, not the runner host — see [Networking → Choosing a pattern](#choosing-a-pattern))
 
 ## Development
 
