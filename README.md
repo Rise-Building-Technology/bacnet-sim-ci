@@ -208,13 +208,15 @@ curl http://localhost:8099/api/devices
 ### Read/Write Objects
 
 ```bash
-# Read
-curl http://localhost:8099/api/devices/1001/objects/analog-input/1
+# Read (any object)
+curl http://localhost:8099/api/devices/1001/objects/analog-output/1
 
-# Write
-curl -X PUT http://localhost:8099/api/devices/1001/objects/analog-input/1 \
+# Write (commandable objects only — analog-output, binary-output, or
+# anything with `commandable: true`. Pass ?force=true to write to a
+# non-commandable object such as analog-input.)
+curl -X PUT http://localhost:8099/api/devices/1001/objects/analog-output/1 \
   -H "Content-Type: application/json" \
-  -d '{"presentValue": 75.0}'
+  -d '{"presentValue": 72.0}'
 ```
 
 ### Change Network Profile at Runtime

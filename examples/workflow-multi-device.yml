@@ -32,10 +32,10 @@ jobs:
 
       - name: Mutate values via HTTP API
         run: |
-          # Set zone temperature on device 1001
-          curl -s -X PUT http://localhost:8099/api/devices/1001/objects/analog-input/1 \
+          # Set Zone Setpoint on device 1001 (analog-output/1 is commandable)
+          curl -s -X PUT http://localhost:8099/api/devices/1001/objects/analog-output/1 \
             -H "Content-Type: application/json" \
-            -d '{"presentValue": 75.0}' | python -m json.tool
+            -d '{"presentValue": 72.0}' | python -m json.tool
 
       - name: Run your BACnet integration tests
         run: |

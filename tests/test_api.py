@@ -425,7 +425,11 @@ class TestSimulationEndpoints:
 
 class TestStateManagement:
     def test_reset(self, client):
-        client.put("/api/devices/1001/objects/analog-input/1", json={"presentValue": 99.0})
+        resp = client.put(
+            "/api/devices/1001/objects/analog-input/1?force=true",
+            json={"presentValue": 99.0},
+        )
+        assert resp.status_code == 200
         resp = client.post("/api/reset")
         assert resp.status_code == 200
         data = resp.json()
@@ -436,7 +440,11 @@ class TestStateManagement:
         resp = client.post("/api/snapshot")
         assert resp.status_code == 200
         snapshot_id = resp.json()["snapshotId"]
-        client.put("/api/devices/1001/objects/analog-input/1", json={"presentValue": 99.0})
+        write_resp = client.put(
+            "/api/devices/1001/objects/analog-input/1?force=true",
+            json={"presentValue": 99.0},
+        )
+        assert write_resp.status_code == 200
         resp = client.post(f"/api/snapshot/{snapshot_id}/restore")
         assert resp.status_code == 200
         data = resp.json()
